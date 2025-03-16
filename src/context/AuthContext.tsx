@@ -1,5 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // Define user roles
 export type UserRole = 'customer' | 'shopkeeper' | 'admin';
@@ -16,9 +18,9 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string, role: UserRole) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 // Create context with default values
@@ -27,7 +29,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   login: async () => {},
   signup: async () => {},
-  logout: () => {},
+  logout: async () => {},
 });
 
 // Hook for using the auth context
@@ -38,42 +40,100 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Check for existing session on mount
-  useEffect(() => {
-    const checkAuth = () => {
-      const storedUser = localStorage.getItem('print-fling-user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+  // Fetch user data from Supabase profiles
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('name, role')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        return null;
       }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
+      return null;
+    }
+  };
+
+  // Set up auth state listener
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setLoading(true);
+      
+      if (event === 'SIGNED_IN' && session) {
+        const profile = await fetchUserProfile(session.user.id);
+        
+        if (profile) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email!,
+            name: profile.name || '',
+            role: profile.role as UserRole,
+          });
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+      
       setLoading(false);
+    });
+
+    // Check for existing session on mount
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session) {
+          const profile = await fetchUserProfile(session.user.id);
+          
+          if (profile) {
+            setUser({
+              id: session.user.id,
+              email: session.user.email!,
+              name: profile.name || '',
+              role: profile.role as UserRole,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error checking session:', error);
+      } finally {
+        setLoading(false);
+      }
     };
     
-    checkAuth();
+    checkSession();
+    
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Login function - in a real app, this would call an API
-  const login = async (email: string, password: string, role: UserRole) => {
+  // Login function
+  const login = async (email: string, password: string) => {
     setLoading(true);
     
     try {
-      // This is a mock implementation. In a real app, you'd validate with a backend
-      // Simulating API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Create mock user
-      const newUser: User = {
-        id: `user-${Date.now()}`,
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        name: email.split('@')[0], // Generate a name from email
-        role
-      };
+        password,
+      });
       
-      // Store user in localStorage
-      localStorage.setItem('print-fling-user', JSON.stringify(newUser));
-      setUser(newUser);
-    } catch (error) {
+      if (error) throw error;
+      
+      // User data will be set by the onAuthStateChange listener
+    } catch (error: any) {
       console.error('Login failed:', error);
-      throw new Error('Invalid credentials');
+      toast.error(error.message || 'Failed to sign in');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -84,32 +144,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     
     try {
-      // Simulating API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Create new user
-      const newUser: User = {
-        id: `user-${Date.now()}`,
+      const { data, error } = await supabase.auth.signUp({
         email,
-        name,
-        role
-      };
+        password,
+        options: {
+          data: {
+            name,
+            role,
+          },
+          emailRedirectTo: `${window.location.origin}/auth`,
+        },
+      });
       
-      // Store user in localStorage
-      localStorage.setItem('print-fling-user', JSON.stringify(newUser));
-      setUser(newUser);
-    } catch (error) {
+      if (error) throw error;
+      
+      toast.success('Verification email sent! Please check your inbox.');
+    } catch (error: any) {
       console.error('Signup failed:', error);
-      throw new Error('Signup failed');
+      toast.error(error.message || 'Failed to create account');
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
   // Logout function
-  const logout = () => {
-    localStorage.removeItem('print-fling-user');
-    setUser(null);
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+    } catch (error: any) {
+      console.error('Logout failed:', error);
+      toast.error(error.message || 'Failed to sign out');
+      throw error;
+    }
   };
 
   // Context value

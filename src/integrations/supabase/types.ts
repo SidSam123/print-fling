@@ -9,7 +9,163 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      print_jobs: {
+        Row: {
+          color_mode: string
+          copies: number
+          created_at: string
+          customer_id: string
+          double_sided: boolean
+          file_path: string
+          id: string
+          paper_size: string
+          price: number | null
+          shop_id: string
+          stapling: boolean
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          color_mode: string
+          copies?: number
+          created_at?: string
+          customer_id: string
+          double_sided?: boolean
+          file_path: string
+          id?: string
+          paper_size: string
+          price?: number | null
+          shop_id: string
+          stapling?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          color_mode?: string
+          copies?: number
+          created_at?: string
+          customer_id?: string
+          double_sided?: boolean
+          file_path?: string
+          id?: string
+          paper_size?: string
+          price?: number | null
+          shop_id?: string
+          stapling?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "print_jobs_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          name: string | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          name?: string | null
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      shop_pricing: {
+        Row: {
+          color_mode: string
+          created_at: string
+          id: string
+          paper_size: string
+          price_per_page: number
+          shop_id: string
+          updated_at: string
+        }
+        Insert: {
+          color_mode: string
+          created_at?: string
+          id?: string
+          paper_size: string
+          price_per_page: number
+          shop_id: string
+          updated_at?: string
+        }
+        Update: {
+          color_mode?: string
+          created_at?: string
+          id?: string
+          paper_size?: string
+          price_per_page?: number
+          shop_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shop_pricing_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shops: {
+        Row: {
+          address: string
+          created_at: string
+          description: string | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          name: string
+          owner_id: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          owner_id: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          owner_id?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

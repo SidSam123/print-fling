@@ -1,11 +1,11 @@
 
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, UserRole } from '@/context/AuthContext';
 
 interface UserRedirectProps {
   children: React.ReactNode;
-  requiredRole?: 'customer' | 'shopkeeper' | 'admin' | null;
+  requiredRole?: UserRole | null;
   redirectTo?: string;
 }
 
@@ -29,21 +29,25 @@ const UserRedirect: React.FC<UserRedirectProps> = ({
     // Redirect if user doesn't have required role
     if (user && requiredRole !== null && user.role !== requiredRole) {
       // Redirect to appropriate dashboard
-      switch (user.role) {
-        case 'customer':
-          navigate('/customer-dashboard');
-          break;
-        case 'shopkeeper':
-          navigate('/shopkeeper-dashboard');
-          break;
-        case 'admin':
-          navigate('/admin-dashboard');
-          break;
-        default:
-          navigate('/');
-      }
+      redirectBasedOnRole(user.role);
     }
   }, [user, loading, requiredRole, redirectTo, navigate]);
+
+  const redirectBasedOnRole = (role: UserRole) => {
+    switch (role) {
+      case 'customer':
+        navigate('/customer-dashboard');
+        break;
+      case 'shopkeeper':
+        navigate('/shopkeeper-dashboard');
+        break;
+      case 'admin':
+        navigate('/admin-dashboard');
+        break;
+      default:
+        navigate('/');
+    }
+  };
 
   // Show loading or render children
   if (loading) {
