@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import ShopkeeperDashboard from "./pages/ShopkeeperDashboard";
+import ShopDetails from "./pages/ShopDetails";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/customer-dashboard" element={<CustomerDashboard />} />
             <Route path="/shopkeeper-dashboard" element={<ShopkeeperDashboard />} />
+            <Route path="/shop/:shopId" element={<ShopDetails />} />
             <Route path="/admin-dashboard" element={<AdminDashboard />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
