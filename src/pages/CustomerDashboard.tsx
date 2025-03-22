@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import UserRedirect from '@/components/UserRedirect';
@@ -7,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileUp, Map, Clock, FileText, Printer, ShoppingBag } from 'lucide-react';
 import FileCheck from '@/components/FileCheck';
+import { Link } from 'react-router-dom';
 
 const CustomerDashboard = () => {
   const { user } = useAuth();
@@ -26,9 +28,11 @@ const CustomerDashboard = () => {
                 </p>
               </div>
               
-              <Button className="flex items-center gap-2 shadow-sm animate-on-load">
-                <FileUp size={16} />
-                New Print Job
+              <Button className="flex items-center gap-2 shadow-sm animate-on-load" asChild>
+                <Link to="/print-order">
+                  <FileUp size={16} />
+                  New Print Job
+                </Link>
               </Button>
             </div>
             
@@ -109,9 +113,11 @@ const CustomerDashboard = () => {
                     <p className="text-sm text-muted-foreground max-w-md mt-2 text-center">
                       You don't have any active print orders. Create a new print job to get started.
                     </p>
-                    <Button className="mt-6 flex items-center gap-2">
-                      <FileUp size={16} />
-                      New Print Job
+                    <Button className="mt-6 flex items-center gap-2" asChild>
+                      <Link to="/print-order">
+                        <FileUp size={16} />
+                        New Print Job
+                      </Link>
                     </Button>
                   </CardContent>
                 </Card>
