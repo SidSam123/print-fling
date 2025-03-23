@@ -127,12 +127,12 @@ const Index = () => {
                 <Link to="/" className="text-sm hover:text-primary transition-colors">
                   Home
                 </Link>
-                <Link to="/how-it-works" className="text-sm hover:text-primary transition-colors">
+                {/* <Link to="/how-it-works" className="text-sm hover:text-primary transition-colors">
                   How it Works
                 </Link>
                 <Link to="/shops" className="text-sm hover:text-primary transition-colors">
                   Print Shops
-                </Link>
+                </Link> */}
                 <Link to="/auth" className="text-sm hover:text-primary transition-colors">
                   Sign In
                 </Link>
