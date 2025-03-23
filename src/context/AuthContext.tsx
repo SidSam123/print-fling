@@ -96,11 +96,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Handle tab close and navigation events
   useEffect(() => {
     let isUnloading = false;
+    let isNavigatingBack = false;
 
     // Handle tab/browser close
     const handleTabClose = (event: BeforeUnloadEvent) => {
       isUnloading = true;
-      // Clear session immediately without async operation
+      // Only logout on actual tab/window close
       supabase.auth.signOut({ scope: 'local' });
       localStorage.clear();
       sessionStorage.clear();
@@ -108,21 +109,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // Handle navigation (back/forward)
-    const handleNavigation = () => {
-      if (!isUnloading) {
-        // Clear session immediately without async operation
-        supabase.auth.signOut({ scope: 'local' });
-        localStorage.clear();
-        sessionStorage.clear();
-        setUser(null);
-        window.location.href = '/';
+    const handleNavigation = (event: PopStateEvent) => {
+      if (!isUnloading && !isNavigatingBack) {
+        isNavigatingBack = true;
+        // Let the default back navigation happen naturally
+        // without programmatically calling history.go()
+        
+        // Reset the flag after navigation completes
+        setTimeout(() => {
+          isNavigatingBack = false;
+        }, 100);
       }
     };
 
     // Handle visibility change (tab switch/close)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        handleTabClose(new Event('beforeunload') as BeforeUnloadEvent);
+        // Do nothing on tab switch, only handle actual close
+        const isClosing = document.visibilityState === 'hidden' && !document.hidden;
+        if (isClosing) {
+          handleTabClose(new Event('beforeunload') as BeforeUnloadEvent);
+        }
       }
     };
 
