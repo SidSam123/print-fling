@@ -8,24 +8,31 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 
+export type UploadedFile = {
+  name: string;
+  size: number;
+  type: string;
+  path: string;
+};
+
 const DocumentUpload = ({ 
   onFileUploaded 
 }: { 
-  onFileUploaded: (filePath: string) => void;
+  onFileUploaded: (file: UploadedFile) => void;
 }) => {
   const { user } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
 
   // When a file is uploaded successfully, notify parent component
   useEffect(() => {
-    if (uploadedFilePath) {
-      onFileUploaded(uploadedFilePath);
+    if (uploadedFile) {
+      onFileUploaded(uploadedFile);
     }
-  }, [uploadedFilePath, onFileUploaded]);
+  }, [uploadedFile, onFileUploaded]);
 
   // Reset the file preview when a file is selected
   useEffect(() => {
@@ -44,8 +51,7 @@ const DocumentUpload = ({
     const files = e.target.files;
     if (files && files.length > 0) {
       // Reset upload state if a new file is selected
-      setUploadedFilePath(null);
-      onFileUploaded('');
+      setUploadedFile(null);
       
       // Check file size (e.g., max 10MB)
       if (files[0].size > 10 * 1024 * 1024) {
@@ -76,8 +82,7 @@ const DocumentUpload = ({
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       // Reset upload state if a new file is selected
-      setUploadedFilePath(null);
-      onFileUploaded('');
+      setUploadedFile(null);
       
       // Check file size (e.g., max 10MB)
       if (files[0].size > 10 * 1024 * 1024) {
@@ -108,15 +113,21 @@ const DocumentUpload = ({
       const fileName = `${user.id}_${Date.now()}.${fileExt}`;
       const filePath = `print_documents/${fileName}`;
       
+      // Set up a progress tracking function
+      const handleProgress = (progress: { loaded: number; total: number }) => {
+        const percent = Math.round((progress.loaded / progress.total) * 100);
+        setUploadProgress(percent);
+      };
+      
+      // Create an AbortController for the fetch request
+      const abortController = new AbortController();
+      
       // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from('print_documents')
         .upload(filePath, selectedFile, {
           upsert: true,
-          onUploadProgress: (progress) => {
-            const percent = Math.round((progress.loaded / progress.total) * 100);
-            setUploadProgress(percent);
-          },
+          signal: abortController.signal,
         });
       
       if (error) throw error;
@@ -126,8 +137,15 @@ const DocumentUpload = ({
         .from('print_documents')
         .getPublicUrl(filePath);
       
-      // Set the uploaded file path for the parent component
-      setUploadedFilePath(filePath);
+      // Set the uploaded file data for the parent component
+      const uploadedFileData: UploadedFile = {
+        name: selectedFile.name,
+        size: selectedFile.size,
+        type: selectedFile.type,
+        path: filePath
+      };
+      
+      setUploadedFile(uploadedFileData);
       
       toast.success('File uploaded successfully');
     } catch (error: any) {
@@ -141,8 +159,7 @@ const DocumentUpload = ({
   const cancelUpload = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
-    setUploadedFilePath(null);
-    onFileUploaded('');
+    setUploadedFile(null);
   };
 
   return (
@@ -188,7 +205,7 @@ const DocumentUpload = ({
                   {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                 </p>
               </div>
-              {!uploadedFilePath && (
+              {!uploadedFile && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -198,7 +215,7 @@ const DocumentUpload = ({
                   <X size={16} />
                 </Button>
               )}
-              {uploadedFilePath && (
+              {uploadedFile && (
                 <div className="p-2 bg-green-100 rounded-full">
                   <Check size={16} className="text-green-600" />
                 </div>
@@ -214,7 +231,7 @@ const DocumentUpload = ({
               </div>
             )}
             
-            {!uploadedFilePath && !isUploading && (
+            {!uploadedFile && !isUploading && (
               <Button 
                 className="w-full flex items-center gap-2"
                 onClick={uploadFile}
@@ -224,7 +241,7 @@ const DocumentUpload = ({
               </Button>
             )}
             
-            {uploadedFilePath && (
+            {uploadedFile && (
               <div className="flex items-center gap-2 p-3 bg-green-100/50 rounded-md text-sm text-green-800">
                 <Check size={16} />
                 <span>Document uploaded successfully and ready for printing</span>
