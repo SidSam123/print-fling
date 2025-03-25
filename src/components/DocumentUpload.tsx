@@ -40,9 +40,9 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
         return;
       }
       
-      // Validate file size (max 5MB)
-      if (selectedFile.size > 5 * 1024 * 1024) {
-        setUploadError('File is too large. Maximum size is 5MB.');
+      // Validate file size (max 10MB)
+      if (selectedFile.size > 10 * 1024 * 1024) {
+        setUploadError('File is too large. Maximum size is 10MB.');
         setFile(null);
         return;
       }
@@ -143,7 +143,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
                 <Upload className="h-10 w-10 text-muted-foreground mb-2" />
                 <p className="text-sm text-muted-foreground text-center">
                   Click to upload or drag and drop<br />
-                  PDF, DOCX, JPEG or PNG (max. 5MB)
+                  PDF, DOCX, JPEG or PNG (max. 10MB)
                 </p>
               </>
             ) : (

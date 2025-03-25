@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
+import { Link } from 'react-router-dom';
 
 type PrintJob = {
   id: string;
@@ -53,57 +54,73 @@ const ActiveOrders = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      fetchPrintJobs();
-    }
-  }, [user]);
+    let mounted = true;
 
-  const fetchPrintJobs = async () => {
-    if (!user) return;
+    const fetchPrintJobs = async () => {
+      if (!user) return;
 
-    try {
-      setLoading(true);
+      try {
+        setLoading(true);
+        const { data: jobsData, error: jobsError } = await supabase
+          .from('print_jobs')
+          .select('*')
+          .eq('customer_id', user.id)
+          .order('created_at', { ascending: false });
 
-      // First, get print jobs
-      const { data: jobsData, error: jobsError } = await supabase
-        .from('print_jobs')
-        .select('*')
-        .eq('customer_id', user.id)
-        .order('created_at', { ascending: false });
+        if (!mounted) return;
 
-      if (jobsError) throw jobsError;
+        if (jobsError) {
+          console.error('Error fetching jobs:', jobsError);
+          toast.error('Failed to load your orders. Please refresh the page.');
+          setLoading(false);
+          return;
+        }
 
-      if (!jobsData || jobsData.length === 0) {
-        setPrintJobs([]);
-        return;
-      }
+        if (!jobsData || jobsData.length === 0) {
+          setPrintJobs([]);
+          setLoading(false);
+          return;
+        }
 
-      // Get shop names for all jobs
-      const shopIds = [...new Set(jobsData.map(job => job.shop_id))];
-      const { data: shopsData, error: shopsError } = await supabase
-        .from('shops')
-        .select('id, name')
-        .in('id', shopIds);
+        const shopIds = [...new Set(jobsData.map(job => job.shop_id))];
+        const { data: shopsData, error: shopsError } = await supabase
+          .from('shops')
+          .select('id, name')
+          .in('id', shopIds);
 
-      if (shopsError) throw shopsError;
+        if (!mounted) return;
 
-      // Combine data
-      const jobsWithShopNames = jobsData.map(job => {
-        const shop = shopsData?.find(s => s.id === job.shop_id);
-        return {
+        if (shopsError) {
+          console.error('Error fetching shops:', shopsError);
+          toast.error('Failed to load shop details. Please refresh the page.');
+          setLoading(false);
+          return;
+        }
+
+        const jobsWithShopNames = jobsData.map(job => ({
           ...job,
-          shop_name: shop?.name || 'Unknown Shop',
-        };
-      });
+          shop_name: shopsData?.find(s => s.id === job.shop_id)?.name || 'Unknown Shop',
+        }));
 
-      setPrintJobs(jobsWithShopNames);
-    } catch (error: any) {
-      console.error('Error fetching print jobs:', error);
-      toast.error(error.message || 'Failed to load your orders');
-    } finally {
-      setLoading(false);
-    }
-  };
+        setPrintJobs(jobsWithShopNames);
+      } catch (error: any) {
+        if (mounted) {
+          console.error('Error fetching print jobs:', error);
+          toast.error('An unexpected error occurred. Please try again.');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchPrintJobs();
+
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
 
   const cancelOrder = async (jobId: string) => {
     try {
@@ -134,13 +151,17 @@ const ActiveOrders = () => {
   if (loading) {
     return (
       <Card className="bg-card shadow-sm">
-        <CardContent className="p-6">
-          <div className="flex flex-col items-center gap-4">
-            <div className="p-4 bg-primary/10 rounded-full">
-              <FileText size={24} className="text-primary" />
-            </div>
-            <h3 className="text-xl font-medium">Loading Orders...</h3>
+        <CardHeader>
+          <CardTitle>My Active Orders</CardTitle>
+          <CardDescription>
+            Track and manage your current print jobs
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center py-8">
+          <div className="p-4 bg-primary/10 rounded-full mb-4">
+            <div className="h-6 w-6 border-2 border-t-primary border-r-transparent border-l-transparent border-b-transparent animate-spin"></div>
           </div>
+          <p className="text-sm text-muted-foreground">Loading your orders...</p>
         </CardContent>
       </Card>
     );
@@ -164,7 +185,7 @@ const ActiveOrders = () => {
             You don't have any active print orders. Create a new print job to get started.
           </p>
           <Button className="mt-6" asChild>
-            <a href="/print-order">New Print Job</a>
+            <Link to="/print-order">New Print Job</Link>
           </Button>
         </CardContent>
       </Card>

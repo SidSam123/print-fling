@@ -17,7 +17,6 @@ const CustomerDashboard = () => {
   const [stats, setStats] = useState({
     activeOrders: 0,
     completedOrders: 0,
-    favoriteShops: 0
   });
   
   useEffect(() => {
@@ -48,21 +47,9 @@ const CustomerDashboard = () => {
       
       if (completedError) throw completedError;
       
-      // For favorite shops (this would require a new table in a real app)
-      // For now, just count unique shops used
-      const { data: uniqueShops, error: shopsError } = await supabase
-        .from('print_jobs')
-        .select('shop_id')
-        .eq('customer_id', user.id);
-      
-      if (shopsError) throw shopsError;
-      
-      const uniqueShopIds = new Set(uniqueShops?.map(item => item.shop_id));
-      
       setStats({
         activeOrders: activeCount || 0,
         completedOrders: completedCount || 0,
-        favoriteShops: uniqueShopIds.size || 0
       });
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
@@ -93,7 +80,7 @@ const CustomerDashboard = () => {
             </div>
             
             {/* Dashboard stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-on-load">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-on-load">
               <Card className="bg-card shadow-sm card-hover">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">Active Orders</CardTitle>
@@ -127,59 +114,16 @@ const CustomerDashboard = () => {
                   </div>
                 </CardContent>
               </Card>
-              
-              <Card className="bg-card shadow-sm card-hover">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Shops Used</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center">
-                    <div className="mr-4 p-2 bg-primary/10 rounded-full">
-                      <Printer className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold">{stats.favoriteShops}</div>
-                      <p className="text-xs text-muted-foreground">Different print shops</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
             
             <Tabs defaultValue="orders" className="w-full animate-on-load">
-              <TabsList className="grid grid-cols-3 max-w-md mb-8">
+              <TabsList className="grid grid-cols-2 max-w-md mb-8">
                 <TabsTrigger value="orders">My Orders</TabsTrigger>
-                <TabsTrigger value="shops">Print Shops</TabsTrigger>
                 <TabsTrigger value="history">History</TabsTrigger>
               </TabsList>
               
               <TabsContent value="orders" className="space-y-6">
                 <ActiveOrders />
-              </TabsContent>
-              
-              <TabsContent value="shops">
-                <Card className="bg-card shadow-sm">
-                  <CardHeader>
-                    <CardTitle>Find Print Shops</CardTitle>
-                    <CardDescription>
-                      Browse nearby print shops to place your order
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <div className="p-5 bg-muted rounded-full mb-5">
-                        <Map size={48} className="text-muted-foreground" />
-                      </div>
-                      <h3 className="text-lg font-medium">Explore Print Shops</h3>
-                      <p className="text-sm text-muted-foreground max-w-md mt-2">
-                        Browse available print shops in your area
-                      </p>
-                      <Button className="mt-6" asChild>
-                        <Link to="/print-order">View Shops</Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
               </TabsContent>
               
               <TabsContent value="history">

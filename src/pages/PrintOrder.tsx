@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import UserRedirect from '@/components/UserRedirect';
 import { useAuth } from '@/context/AuthContext';
@@ -11,6 +11,8 @@ import DocumentUpload, { UploadedFile } from '@/components/DocumentUpload';
 import ShopSelector from '@/components/ShopSelector';
 import PrintSpecifications, { PrintSpecs } from '@/components/PrintSpecifications';
 import PaymentCalculator from '@/components/PaymentCalculator';
+// import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 type Shop = {
   id: string;
@@ -23,6 +25,7 @@ type Shop = {
 
 const PrintOrder = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('upload');
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
@@ -36,9 +39,71 @@ const PrintOrder = () => {
   });
   const [orderComplete, setOrderComplete] = useState(false);
 
+  // Cleanup function
+  const cleanup = async () => {
+    try {
+      if (uploadedFile?.path) {
+        await supabase.storage
+          .from('print-documents')
+          .remove([uploadedFile.path]);
+        console.log('Cleaned up temporary upload');
+      }
+    } catch (error) {
+      console.error('Error cleaning up:', error);
+    } finally {
+      localStorage.removeItem('print-order-state');
+      setUploadedFile(null);
+      setSelectedShop(null);
+      setPrintSpecs({
+        paperSize: 'A4',
+        colorMode: 'blackAndWhite',
+        copies: 1,
+        doubleSided: false,
+        stapling: false,
+        pricePerPage: null
+      });
+    }
+  };
+
+  // Handle navigation back to dashboard
+  const handleBackToDashboard = async () => {
+    await cleanup();
+    navigate('/customer-dashboard');
+  };
+
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, []);
+
+  // Handle back button/navigation
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (uploadedFile && !orderComplete) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [uploadedFile, orderComplete]);
+
   const handleFileUploaded = (file: UploadedFile) => {
-    setUploadedFile(file);
-    setActiveTab('shop');
+    // Clean up any existing uploaded file first
+    if (uploadedFile?.path) {
+      cleanup().then(() => {
+        setUploadedFile(file);
+        setActiveTab('shop');
+      });
+    } else {
+      setUploadedFile(file);
+      setActiveTab('shop');
+    }
   };
 
   const handleShopSelected = (shop: Shop) => {
@@ -52,10 +117,11 @@ const PrintOrder = () => {
 
   const handleOrderPlaced = () => {
     setOrderComplete(true);
+    localStorage.removeItem('print-order-state');
   };
 
-  const resetOrder = () => {
-    setUploadedFile(null);
+  const resetOrder = async () => {
+    await cleanup();
     setSelectedShop(null);
     setPrintSpecs({
       paperSize: 'A4',
@@ -69,6 +135,19 @@ const PrintOrder = () => {
     setActiveTab('upload');
   };
 
+  // Handle tab change
+  const handleTabChange = async (value: string) => {
+    // If going back to upload when we already have a file, confirm first
+    if (value === 'upload' && uploadedFile) {
+      if (window.confirm('Going back to upload will remove your current file. Continue?')) {
+        await cleanup();
+        setActiveTab(value);
+      }
+      return;
+    }
+    setActiveTab(value);
+  };
+
   return (
     <UserRedirect requiredRole="customer">
       <div className="min-h-screen dashboard-gradient">
@@ -76,10 +155,14 @@ const PrintOrder = () => {
         
         <div className="container px-4 md:px-6 pt-28 pb-16 md:pt-36 md:pb-20">
           <div className="max-w-4xl mx-auto">
-            <Link to="/customer-dashboard" className="inline-flex items-center mb-8 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Button
+              variant="ghost"
+              className="inline-flex items-center mb-8 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              onClick={handleBackToDashboard}
+            >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Dashboard
-            </Link>
+            </Button>
             
             <div className="flex flex-col gap-8 animate-on-load">
               <div>
