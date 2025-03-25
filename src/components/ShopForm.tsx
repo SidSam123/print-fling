@@ -10,13 +10,19 @@ import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+interface Location {
+  lat: number;
+  lng: number;
+}
+
 interface ShopFormProps {
   shopId?: string;
+  initialLocation?: Location | null;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-const ShopForm: React.FC<ShopFormProps> = ({ shopId, onSuccess, onCancel }) => {
+const ShopForm: React.FC<ShopFormProps> = ({ shopId, initialLocation, onSuccess, onCancel }) => {
   const { user } = useAuth();
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -90,6 +96,8 @@ const ShopForm: React.FC<ShopFormProps> = ({ shopId, onSuccess, onCancel }) => {
             address,
             phone,
             description,
+            latitude: initialLocation?.lat || null,
+            longitude: initialLocation?.lng || null,
           });
           
         if (error) throw error;
