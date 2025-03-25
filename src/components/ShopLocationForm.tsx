@@ -70,34 +70,30 @@ const ShopLocationForm: React.FC<ShopLocationFormProps> = ({ shopId, onSuccess, 
     
     try {
       if (shopId) {
-        // Update existing shop location
-        const { error } = await supabase
-          .from('shops')
-          .update({
-            latitude: location.lat,
-            longitude: location.lng,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', shopId);
-          
-        if (error) throw error;
+        // For existing shops, always go to details form after location update
+        // to allow updating other shop information
+        setShopData({
+          ...shopData,
+          latitude: location.lat,
+          longitude: location.lng
+        });
         
-        toast.success('Shop location updated successfully');
-        if (onSuccess) onSuccess();
+        setFormMode('details');
+        setIsSubmitting(false);
       } else {
         // First time setting up a shop, go to details form
         setFormMode('details');
+        setIsSubmitting(false);
       }
     } catch (error: any) {
       console.error('Error saving shop location:', error);
       toast.error(error.message || 'Failed to save shop location');
-    } finally {
       setIsSubmitting(false);
     }
   };
   
   const handleShopFormSuccess = () => {
-    toast.success('Shop created successfully with location!');
+    toast.success(shopId ? 'Shop updated successfully!' : 'Shop created successfully with location!');
     if (onSuccess) onSuccess();
   };
   
@@ -117,9 +113,11 @@ const ShopLocationForm: React.FC<ShopLocationFormProps> = ({ shopId, onSuccess, 
           />
         ) : (
           <ShopForm 
+            shopId={shopId}
+            initialData={shopData}
+            initialLocation={location}
             onSuccess={handleShopFormSuccess}
             onCancel={() => setFormMode('map')}
-            initialLocation={location}
           />
         )}
       </CardContent>
@@ -149,7 +147,7 @@ const ShopLocationForm: React.FC<ShopLocationFormProps> = ({ shopId, onSuccess, 
             ) : (
               <>
                 <MapPin className="mr-2 h-4 w-4" />
-                {shopId ? 'Update Location' : 'Continue to Shop Details'}
+                {shopId ? 'Continue to Edit Shop Details' : 'Continue to Shop Details'}
               </>
             )}
           </Button>
