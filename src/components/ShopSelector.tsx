@@ -62,7 +62,14 @@ const ShopSelector = ({ onShopSelected }: { onShopSelected: (shop: Shop) => void
     if (address) {
       setLocationAddress(address);
     }
-    setLocationMapOpen(false);
+  };
+
+  const handleLocationConfirm = () => {
+    if (userLocation) {
+      setLocationMapOpen(false);
+    } else {
+      toast.error('Please select a location first');
+    }
   };
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -151,6 +158,11 @@ const ShopSelector = ({ onShopSelected }: { onShopSelected: (shop: Shop) => void
                 initialLocation={userLocation || undefined} 
                 onSelectLocation={handleLocationSelect} 
               />
+              <div className="flex justify-end mt-4">
+                <Button onClick={handleLocationConfirm}>
+                  Confirm Location
+                </Button>
+              </div>
             </SheetContent>
           </Sheet>
 
