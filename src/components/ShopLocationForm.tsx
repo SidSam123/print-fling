@@ -23,6 +23,7 @@ interface Location {
 const ShopLocationForm: React.FC<ShopLocationFormProps> = ({ shopId, onSuccess, onCancel }) => {
   const { user } = useAuth();
   const [location, setLocation] = useState<Location | null>(null);
+  const [address, setAddress] = useState<string>('');
   const [shopData, setShopData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formMode, setFormMode] = useState<'map' | 'details'>('map');
@@ -49,6 +50,9 @@ const ShopLocationForm: React.FC<ShopLocationFormProps> = ({ shopId, onSuccess, 
           if (data.latitude && data.longitude) {
             setLocation({ lat: data.latitude, lng: data.longitude });
           }
+          if (data.address) {
+            setAddress(data.address);
+          }
         }
       } catch (error) {
         console.error('Error in fetchShop:', error);
@@ -59,8 +63,11 @@ const ShopLocationForm: React.FC<ShopLocationFormProps> = ({ shopId, onSuccess, 
     fetchShop();
   }, [shopId]);
   
-  const handleLocationSelect = (newLocation: Location) => {
+  const handleLocationSelect = (newLocation: Location, newAddress?: string) => {
     setLocation(newLocation);
+    if (newAddress) {
+      setAddress(newAddress);
+    }
   };
   
   const handleSubmitLocation = async () => {
@@ -75,7 +82,8 @@ const ShopLocationForm: React.FC<ShopLocationFormProps> = ({ shopId, onSuccess, 
         setShopData({
           ...shopData,
           latitude: location.lat,
-          longitude: location.lng
+          longitude: location.lng,
+          address: address || shopData?.address
         });
         
         setFormMode('details');
@@ -114,7 +122,10 @@ const ShopLocationForm: React.FC<ShopLocationFormProps> = ({ shopId, onSuccess, 
         ) : (
           <ShopForm 
             shopId={shopId}
-            initialData={shopData}
+            initialData={{
+              ...shopData,
+              address: address || shopData?.address
+            }}
             initialLocation={location}
             onSuccess={handleShopFormSuccess}
             onCancel={() => setFormMode('map')}

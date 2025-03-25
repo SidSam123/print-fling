@@ -13,7 +13,7 @@ interface Location {
 
 interface GoogleMapPickerProps {
   initialLocation?: Location;
-  onSelectLocation: (location: Location) => void;
+  onSelectLocation: (location: Location, address?: string) => void;
 }
 
 declare global {
@@ -29,9 +29,29 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
   const [marker, setMarker] = useState<any>(null);
   const [searchInput, setSearchInput] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(initialLocation || null);
-
+  const [selectedAddress, setSelectedAddress] = useState<string>('');
+  
   // Default location (center of map if none provided)
   const defaultLocation = { lat: 37.7749, lng: -122.4194 }; // San Francisco
+
+  // Function to perform reverse geocoding
+  const getAddressFromLocation = (location: Location) => {
+    if (!window.google) return;
+    
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ 'location': location }, (results: any, status: any) => {
+      if (status === 'OK') {
+        if (results[0]) {
+          const address = results[0].formatted_address;
+          setSelectedAddress(address);
+          onSelectLocation(location, address);
+        }
+      } else {
+        console.error('Geocoder failed due to: ' + status);
+        onSelectLocation(location); // Still pass the location even if geocoding fails
+      }
+    });
+  };
 
   useEffect(() => {
     // Create script tag to load Google Maps
@@ -66,6 +86,9 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
           
           setMarker(newMarker);
           
+          // Get address for initial location
+          getAddressFromLocation(selectedLocation);
+          
           // Update location when marker is dragged
           newMarker.addListener('dragend', function() {
             const position = newMarker.getPosition();
@@ -74,7 +97,7 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
               lng: position.lng()
             };
             setSelectedLocation(newLocation);
-            onSelectLocation(newLocation);
+            getAddressFromLocation(newLocation);
           });
         }
         
@@ -86,7 +109,6 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
           };
           
           setSelectedLocation(newLocation);
-          onSelectLocation(newLocation);
           
           // Remove existing marker if exists
           if (marker) {
@@ -103,6 +125,9 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
           
           setMarker(newMarker);
           
+          // Get address for clicked location
+          getAddressFromLocation(newLocation);
+          
           // Update location when marker is dragged
           newMarker.addListener('dragend', function() {
             const position = newMarker.getPosition();
@@ -111,7 +136,7 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
               lng: position.lng()
             };
             setSelectedLocation(newLocation);
-            onSelectLocation(newLocation);
+            getAddressFromLocation(newLocation);
           });
         });
       }
@@ -156,7 +181,11 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
         
         setMarker(newMarker);
         setSelectedLocation(newLocation);
-        onSelectLocation(newLocation);
+        
+        // Get address from search result
+        const address = results[0].formatted_address;
+        setSelectedAddress(address);
+        onSelectLocation(newLocation, address);
         
         // Update location when marker is dragged
         newMarker.addListener('dragend', function() {
@@ -166,7 +195,7 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
             lng: position.lng()
           };
           setSelectedLocation(newLocation);
-          onSelectLocation(newLocation);
+          getAddressFromLocation(newLocation);
         });
       }
     });
@@ -199,7 +228,9 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
           
           setMarker(newMarker);
           setSelectedLocation(newLocation);
-          onSelectLocation(newLocation);
+          
+          // Get address for current location
+          getAddressFromLocation(newLocation);
           
           // Update location when marker is dragged
           newMarker.addListener('dragend', function() {
@@ -209,7 +240,7 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
               lng: position.lng()
             };
             setSelectedLocation(newLocation);
-            onSelectLocation(newLocation);
+            getAddressFromLocation(newLocation);
           });
         },
         () => {
@@ -246,23 +277,36 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
       ></div>
       
       {selectedLocation && (
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="latitude">Latitude</Label>
-            <Input 
-              id="latitude" 
-              value={selectedLocation.lat.toFixed(6)} 
-              readOnly 
-            />
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="latitude">Latitude</Label>
+              <Input 
+                id="latitude" 
+                value={selectedLocation.lat.toFixed(6)} 
+                readOnly 
+              />
+            </div>
+            <div>
+              <Label htmlFor="longitude">Longitude</Label>
+              <Input 
+                id="longitude" 
+                value={selectedLocation.lng.toFixed(6)} 
+                readOnly 
+              />
+            </div>
           </div>
-          <div>
-            <Label htmlFor="longitude">Longitude</Label>
-            <Input 
-              id="longitude" 
-              value={selectedLocation.lng.toFixed(6)} 
-              readOnly 
-            />
-          </div>
+          
+          {selectedAddress && (
+            <div>
+              <Label htmlFor="address">Selected Address</Label>
+              <Input 
+                id="address" 
+                value={selectedAddress} 
+                readOnly 
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
