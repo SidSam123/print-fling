@@ -51,7 +51,9 @@ const PrintOrder = () => {
     } catch (error) {
       console.error('Error cleaning up:', error);
     } finally {
+      // Clear all print order related state and storage
       localStorage.removeItem('print-order-state');
+      sessionStorage.removeItem('print-order-state');
       setUploadedFile(null);
       setSelectedShop(null);
       setPrintSpecs({
