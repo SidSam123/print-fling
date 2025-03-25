@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { MapPin, Search } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 interface Location {
   lat: number;
@@ -56,7 +57,14 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
   useEffect(() => {
     // Create script tag to load Google Maps
     const googleMapScript = document.createElement('script');
-    const apiKey = 'AIzaSyAt-mYqJvqHDLKdlN3cZ_3HDN5IJ8J-D4U';
+
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      console.error('Google Maps API key is missing');
+      toast.error('Map configuration error. Please contact support.');
+      return;
+    }
+
     googleMapScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initMap`;
     googleMapScript.async = true;
     googleMapScript.defer = true;

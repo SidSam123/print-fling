@@ -8,8 +8,16 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 
+export interface UploadedFile {
+  path: string;
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+}
+
 interface DocumentUploadProps {
-  onFileUploaded: (filePath: string) => void;
+  onFileUploaded: (file: UploadedFile) => void;
 }
 
 const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
@@ -56,32 +64,49 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
       const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
       const filePath = `${user.id}/${fileName}`;
       
-      // Upload the file to Supabase Storage
-      const { error } = await supabase.storage
+      // Using a simple upload without progress
+      const { error, data } = await supabase.storage
         .from('documents')
         .upload(filePath, file, {
-          // We can't use signal here as it's not in the FileOptions type
-          // So we'll remove it
           cacheControl: '3600',
-          upsert: false,
-          onUploadProgress: (progress) => {
-            const percent = progress.percent ? Math.round(progress.percent) : 0;
-            setProgress(percent);
-          }
+          upsert: false
         });
       
       if (error) {
         throw error;
       }
       
+      // Simulating progress since we can't use onUploadProgress
+      const simulateProgress = () => {
+        let currentProgress = 0;
+        const interval = setInterval(() => {
+          currentProgress += 5;
+          setProgress(Math.min(currentProgress, 95));
+          if (currentProgress >= 95) clearInterval(interval);
+        }, 100);
+        return interval;
+      };
+      
+      const progressInterval = simulateProgress();
+      
       // Get the public URL
-      const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
+      const { data: publicUrlData } = supabase.storage.from('documents').getPublicUrl(filePath);
+      
+      // Clear the progress interval and set to 100%
+      clearInterval(progressInterval);
+      setProgress(100);
       
       setUploading(false);
       toast.success('Document uploaded successfully!');
       
-      // Call the callback with the file path
-      onFileUploaded(filePath);
+      // Call the callback with the file details
+      onFileUploaded({
+        path: filePath,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: publicUrlData.publicUrl
+      });
       
     } catch (error: any) {
       console.error('Error uploading file:', error);
