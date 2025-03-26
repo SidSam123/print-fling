@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import ShopLocationForm from '@/components/ShopLocationForm';
 import ShopPricingTab from '@/components/ShopPricingTab';
+import ShopOrdersTab from '@/components/ShopOrdersTab';
 
 const ShopkeeperDashboard = () => {
   const { user } = useAuth();
@@ -18,6 +19,8 @@ const ShopkeeperDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showNewShopForm, setShowNewShopForm] = useState(false);
   const [editingShopId, setEditingShopId] = useState<string | null>(null);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const [totalSales, setTotalSales] = useState(0);
   
   // Fetch shops owned by the current user
   useEffect(() => {
@@ -38,6 +41,11 @@ const ShopkeeperDashboard = () => {
         }
         
         setShops(data || []);
+
+        // If we have shops, fetch stats
+        if (data && data.length > 0) {
+          fetchStats(data.map(shop => shop.id));
+        }
       } catch (error) {
         console.error('Error in fetchShops:', error);
         toast.error('Something went wrong while loading your shops');
@@ -48,6 +56,36 @@ const ShopkeeperDashboard = () => {
     
     fetchShops();
   }, [user]);
+
+  // Fetch dashboard statistics
+  const fetchStats = async (shopIds: string[]) => {
+    try {
+      // Fetch pending orders count
+      const { data: pendingOrders, error: pendingError } = await supabase
+        .from('print_jobs')
+        .select('id', { count: 'exact' })
+        .in('shop_id', shopIds)
+        .eq('status', 'pending');
+        
+      if (!pendingError) {
+        setPendingOrdersCount(pendingOrders?.length || 0);
+      }
+      
+      // Fetch total sales
+      const { data: salesData, error: salesError } = await supabase
+        .from('print_jobs')
+        .select('price')
+        .in('shop_id', shopIds)
+        .in('status', ['ready', 'processing']);
+        
+      if (!salesError && salesData) {
+        const total = salesData.reduce((sum, order) => sum + (order.price || 0), 0);
+        setTotalSales(total);
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
   
   const handleNewShopSuccess = () => {
     setShowNewShopForm(false);
@@ -80,6 +118,11 @@ const ShopkeeperDashboard = () => {
       }
       
       setShops(data || []);
+      
+      // If we have shops, fetch stats
+      if (data && data.length > 0) {
+        fetchStats(data.map(shop => shop.id));
+      }
     } catch (error) {
       console.error('Error in fetchShops:', error);
       toast.error('Something went wrong while loading your shops');
@@ -141,7 +184,7 @@ const ShopkeeperDashboard = () => {
                       <Clock className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <div className="text-2xl font-bold">0</div>
+                      <div className="text-2xl font-bold">{pendingOrdersCount}</div>
                       <p className="text-xs text-muted-foreground">Awaiting processing</p>
                     </div>
                   </div>
@@ -158,7 +201,7 @@ const ShopkeeperDashboard = () => {
                       <BarChart className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <div className="text-2xl font-bold">$0.00</div>
+                      <div className="text-2xl font-bold">${totalSales.toFixed(2)}</div>
                       <p className="text-xs text-muted-foreground">Lifetime revenue</p>
                     </div>
                   </div>
@@ -246,7 +289,7 @@ const ShopkeeperDashboard = () => {
                             >
                               {shop.latitude && shop.longitude ? 'Update Location' : 'Set Location'}
                             </Button>
-                            <Button variant="outline" size="sm">View Orders</Button>
+                            <Button variant="outline" size="sm">View Details</Button>
                           </CardFooter>
                         </Card>
                       ))}
@@ -273,25 +316,7 @@ const ShopkeeperDashboard = () => {
                 </TabsContent>
                 
                 <TabsContent value="orders">
-                  <Card className="bg-card shadow-sm">
-                    <CardHeader>
-                      <CardTitle>Print Orders</CardTitle>
-                      <CardDescription>
-                        View and manage all incoming print job requests
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <div className="p-5 bg-muted rounded-full mb-5">
-                          <FileText size={48} className="text-muted-foreground" />
-                        </div>
-                        <h3 className="text-lg font-medium">No orders yet</h3>
-                        <p className="text-sm text-muted-foreground max-w-md mt-2">
-                          Orders will appear here once customers place them for your shop
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <ShopOrdersTab />
                 </TabsContent>
                 
                 <TabsContent value="pricing">

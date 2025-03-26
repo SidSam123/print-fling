@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, FileText, Clock, Printer, AlertTriangle, CheckCircle } from 'lucide-react';
+import { CalendarDays, FileText, Clock, Printer, AlertTriangle, CheckCircle, Eye } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type PrintJob = {
   id: string;
@@ -22,6 +23,7 @@ type PrintJob = {
   double_sided: boolean;
   stapling: boolean;
   price: number;
+  file_path: string;
   shop_name?: string;
 };
 
@@ -52,70 +54,68 @@ const ActiveOrders = () => {
   const { user } = useAuth();
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewingDocument, setViewingDocument] = useState<string | null>(null);
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+
+  const fetchPrintJobs = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      const { data: jobsData, error: jobsError } = await supabase
+        .from('print_jobs')
+        .select('*')
+        .eq('customer_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (jobsError) {
+        console.error('Error fetching jobs:', jobsError);
+        toast.error('Failed to load your orders. Please refresh the page.');
+        setLoading(false);
+        return;
+      }
+
+      if (!jobsData || jobsData.length === 0) {
+        setPrintJobs([]);
+        setLoading(false);
+        return;
+      }
+
+      const shopIds = [...new Set(jobsData.map(job => job.shop_id))];
+      const { data: shopsData, error: shopsError } = await supabase
+        .from('shops')
+        .select('id, name')
+        .in('id', shopIds);
+
+      if (shopsError) {
+        console.error('Error fetching shops:', shopsError);
+        toast.error('Failed to load shop details. Please refresh the page.');
+        setLoading(false);
+        return;
+      }
+
+      const jobsWithShopNames = jobsData.map(job => ({
+        ...job,
+        shop_name: shopsData?.find(s => s.id === job.shop_id)?.name || 'Unknown Shop',
+      }));
+
+      setPrintJobs(jobsWithShopNames);
+    } catch (error: any) {
+      console.error('Error fetching print jobs:', error);
+      toast.error('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
 
-    const fetchPrintJobs = async () => {
-      if (!user) return;
-
-      try {
-        setLoading(true);
-        const { data: jobsData, error: jobsError } = await supabase
-          .from('print_jobs')
-          .select('*')
-          .eq('customer_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (!mounted) return;
-
-        if (jobsError) {
-          console.error('Error fetching jobs:', jobsError);
-          toast.error('Failed to load your orders. Please refresh the page.');
-          setLoading(false);
-          return;
-        }
-
-        if (!jobsData || jobsData.length === 0) {
-          setPrintJobs([]);
-          setLoading(false);
-          return;
-        }
-
-        const shopIds = [...new Set(jobsData.map(job => job.shop_id))];
-        const { data: shopsData, error: shopsError } = await supabase
-          .from('shops')
-          .select('id, name')
-          .in('id', shopIds);
-
-        if (!mounted) return;
-
-        if (shopsError) {
-          console.error('Error fetching shops:', shopsError);
-          toast.error('Failed to load shop details. Please refresh the page.');
-          setLoading(false);
-          return;
-        }
-
-        const jobsWithShopNames = jobsData.map(job => ({
-          ...job,
-          shop_name: shopsData?.find(s => s.id === job.shop_id)?.name || 'Unknown Shop',
-        }));
-
-        setPrintJobs(jobsWithShopNames);
-      } catch (error: any) {
-        if (mounted) {
-          console.error('Error fetching print jobs:', error);
-          toast.error('An unexpected error occurred. Please try again.');
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
+    const loadJobs = async () => {
+      await fetchPrintJobs();
     };
 
-    fetchPrintJobs();
+    loadJobs();
 
     return () => {
       mounted = false;
@@ -145,6 +145,22 @@ const ActiveOrders = () => {
     } catch (error: any) {
       console.error('Error cancelling order:', error);
       toast.error(error.message || 'Failed to cancel order');
+    }
+  };
+
+  const viewDocument = async (filePath: string) => {
+    try {
+      setViewingDocument(filePath);
+      
+      const { data } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath);
+      
+      setDocumentUrl(data.publicUrl);
+    } catch (error) {
+      console.error('Error getting document URL:', error);
+      toast.error('Failed to load the document');
+      setViewingDocument(null);
     }
   };
 
@@ -193,83 +209,111 @@ const ActiveOrders = () => {
   }
 
   return (
-    <Card className="bg-card shadow-sm">
-      <CardHeader>
-        <CardTitle>My Active Orders</CardTitle>
-        <CardDescription>
-          Track and manage your current print jobs
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {printJobs.map((job) => {
-            const status = job.status as keyof typeof statusStyles;
-            const StatusIcon = statusStyles[status]?.icon || Clock;
+    <>
+      <Card className="bg-card shadow-sm">
+        <CardHeader>
+          <CardTitle>My Active Orders</CardTitle>
+          <CardDescription>
+            Track and manage your current print jobs
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {printJobs.map((job) => {
+              const status = job.status as keyof typeof statusStyles;
+              const StatusIcon = statusStyles[status]?.icon || Clock;
 
-            return (
-              <div 
-                key={job.id}
-                className="p-4 border rounded-lg flex flex-col space-y-3"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex gap-3 items-center">
-                    <div className={`p-2 rounded-full ${statusStyles[status]?.bgColor || 'bg-gray-100'}`}>
-                      <StatusIcon size={18} className={`${statusStyles[status]?.textColor || 'text-gray-800'}`} />
+              return (
+                <div 
+                  key={job.id}
+                  className="p-4 border rounded-lg flex flex-col space-y-3"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex gap-3 items-center">
+                      <div className={`p-2 rounded-full ${statusStyles[status]?.bgColor || 'bg-gray-100'}`}>
+                        <StatusIcon size={18} className={`${statusStyles[status]?.textColor || 'text-gray-800'}`} />
+                      </div>
+                      <div>
+                        <h4 className="font-medium">{job.shop_name}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge 
+                      variant="outline" 
+                      className={`${statusStyles[status]?.textColor || ''} ${statusStyles[status]?.bgColor || ''}`}
+                    >
+                      {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                    </Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Paper:</span> {job.paper_size}
                     </div>
                     <div>
-                      <h4 className="font-medium">{job.shop_name}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
-                      </p>
+                      <span className="text-muted-foreground">Color:</span> {job.color_mode === 'bw' ? 'B&W' : 'Color'}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Copies:</span> {job.copies}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Double-sided:</span> {job.double_sided ? 'Yes' : 'No'}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Stapling:</span> {job.stapling ? 'Yes' : 'No'}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Price:</span> ${job.price?.toFixed(2)}
                     </div>
                   </div>
-                  <Badge 
-                    variant="outline" 
-                    className={`${statusStyles[status]?.textColor || ''} ${statusStyles[status]?.bgColor || ''}`}
-                  >
-                    {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-                  </Badge>
-                </div>
-                
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Paper:</span> {job.paper_size}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Color:</span> {job.color_mode === 'blackAndWhite' ? 'B&W' : 'Color'}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Copies:</span> {job.copies}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Double-sided:</span> {job.double_sided ? 'Yes' : 'No'}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Stapling:</span> {job.stapling ? 'Yes' : 'No'}
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Price:</span> ${job.price?.toFixed(2)}
-                  </div>
-                </div>
-                
-                {job.status === 'pending' && (
-                  <div className="pt-2 flex justify-end">
+                  
+                  <div className="pt-2 flex justify-between">
                     <Button 
                       variant="outline" 
-                      size="sm" 
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => cancelOrder(job.id)}
+                      size="sm"
+                      onClick={() => viewDocument(job.file_path)}
                     >
-                      Cancel Order
+                      <Eye className="mr-2 h-4 w-4" />
+                      View Document
                     </Button>
+                    
+                    {job.status === 'pending' && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => cancelOrder(job.id)}
+                      >
+                        Cancel Order
+                      </Button>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!viewingDocument} onOpenChange={() => setViewingDocument(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Document Preview</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            {documentUrl && (
+              <iframe 
+                src={documentUrl} 
+                className="w-full h-full min-h-[70vh]" 
+                title="Document Preview"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

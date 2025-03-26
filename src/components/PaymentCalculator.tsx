@@ -1,60 +1,62 @@
-
 import React, { useState } from 'react';
-import { Calculator, DollarSign, CreditCard, FileText } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PrintSpecs } from './PrintSpecifications';
-import { toast } from 'sonner';
+import { PrintSpecs } from '@/components/PrintSpecifications';
 import { useAuth } from '@/context/AuthContext';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { Wallet, CreditCard, Loader2 } from 'lucide-react';
 
-type PaymentCalculatorProps = {
+interface PaymentCalculatorProps {
   printSpecs: PrintSpecs;
   shopId: string | null;
   documentPath: string | null;
   onOrderPlaced: () => void;
-};
+}
 
-const PaymentCalculator: React.FC<PaymentCalculatorProps> = ({
-  printSpecs,
-  shopId,
+const PaymentCalculator = ({ 
+  printSpecs, 
+  shopId, 
   documentPath,
-  onOrderPlaced
-}) => {
+  onOrderPlaced 
+}: PaymentCalculatorProps) => {
   const { user } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
   
-  // Calculate total price
   const calculateTotalPrice = () => {
-    if (!printSpecs.pricePerPage) return null;
+    if (!printSpecs.pricePerPage) return 0;
     
-    let numberOfPages = printSpecs.pageCount || 1; // Use the actual page count from the document
-    let totalPrice = printSpecs.pricePerPage * numberOfPages * printSpecs.copies;
+    // Base calculation
+    let basePrice = printSpecs.pricePerPage * printSpecs.pageCount * printSpecs.copies;
     
-    // Apply discount for double-sided (in a real implementation, this would be more sophisticated)
+    // Apply double-sided discount if enabled (15% off)
     if (printSpecs.doubleSided) {
-      totalPrice = totalPrice * 0.9; // 10% discount for double-sided
+      basePrice = basePrice * 0.85;
     }
     
-    // Add fee for stapling
-    if (printSpecs.stapling) {
-      totalPrice += 0.5; // $0.50 fee for stapling
-    }
+    // Apply stapling fee if enabled (add $0.50)
+    const staplingFee = printSpecs.stapling ? 0.5 : 0;
     
-    return totalPrice;
+    // Return formatted to 2 decimal places
+    return Math.round((basePrice + staplingFee) * 100) / 100;
   };
-  
-  const totalPrice = calculateTotalPrice();
-  
-  const placeOrder = async () => {
-    if (!user || !shopId || !documentPath || !printSpecs.pricePerPage) {
+
+  const handlePlaceOrder = async () => {
+    if (!user || !shopId || !documentPath) {
       toast.error('Missing required information to place order');
       return;
     }
     
-    setIsSubmitting(true);
+    if (!printSpecs.pricePerPage) {
+      toast.error('Cannot place order without pricing information');
+      return;
+    }
     
+    setLoading(true);
     try {
+      const totalPrice = calculateTotalPrice();
+      
+      // Insert the print job into the database
       const { data, error } = await supabase
         .from('print_jobs')
         .insert({
@@ -67,23 +69,25 @@ const PaymentCalculator: React.FC<PaymentCalculatorProps> = ({
           double_sided: printSpecs.doubleSided,
           stapling: printSpecs.stapling,
           price: totalPrice,
+          status: 'pending'
         })
-        .select();
+        .select('id');
+        
+      if (error) {
+        console.error('Error placing order:', error);
+        throw new Error(error.message);
+      }
       
-      if (error) throw error;
-      
-      toast.success('Print order placed successfully!');
+      toast.success('Order placed successfully!');
       onOrderPlaced();
     } catch (error: any) {
       console.error('Error placing order:', error);
-      toast.error(error.message || 'Failed to place the order');
+      toast.error(error.message || 'Failed to place order');
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
-
-  const isFormComplete = shopId && documentPath && printSpecs.pricePerPage !== null;
-
+  
   return (
     <Card className="bg-card shadow-sm">
       <CardHeader>
@@ -148,11 +152,11 @@ const PaymentCalculator: React.FC<PaymentCalculatorProps> = ({
       <CardFooter>
         <Button 
           className="w-full flex items-center gap-2" 
-          disabled={!isFormComplete || isSubmitting}
-          onClick={placeOrder}
+          disabled={!isFormComplete || loading}
+          onClick={handlePlaceOrder}
         >
           <CreditCard size={16} />
-          {isSubmitting ? 'Processing...' : 'Place Order'}
+          {loading ? <Loader2 size={16} className="mr-2" /> : 'Place Order'}
         </Button>
       </CardFooter>
     </Card>

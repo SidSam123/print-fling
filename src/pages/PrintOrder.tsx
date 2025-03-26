@@ -30,7 +30,7 @@ const PrintOrder = () => {
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [printSpecs, setPrintSpecs] = useState<PrintSpecs>({
     paperSize: 'A4',
-    colorMode: 'blackAndWhite',
+    colorMode: 'bw', // Updated to 'bw' instead of 'blackAndWhite'
     copies: 1,
     doubleSided: false,
     stapling: false,
@@ -58,7 +58,7 @@ const PrintOrder = () => {
       setSelectedShop(null);
       setPrintSpecs({
         paperSize: 'A4',
-        colorMode: 'blackAndWhite',
+        colorMode: 'bw', // Updated to 'bw' instead of 'blackAndWhite'
         copies: 1,
         doubleSided: false,
         stapling: false,
@@ -136,7 +136,7 @@ const PrintOrder = () => {
     setSelectedShop(null);
     setPrintSpecs({
       paperSize: 'A4',
-      colorMode: 'blackAndWhite',
+      colorMode: 'bw', // Updated to 'bw' instead of 'blackAndWhite'
       copies: 1,
       doubleSided: false,
       stapling: false,
