@@ -1,11 +1,12 @@
+
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PrintSpecs } from '@/components/PrintSpecifications';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { Wallet, CreditCard, Loader2 } from 'lucide-react';
+import { Wallet, CreditCard, Loader2, DollarSign, Calculator } from 'lucide-react';
 
 interface PaymentCalculatorProps {
   printSpecs: PrintSpecs;
@@ -88,6 +89,12 @@ const PaymentCalculator = ({
     }
   };
   
+  // Calculate if form is complete and ready for order placement
+  const isFormComplete = user && shopId && documentPath && printSpecs.pricePerPage !== null;
+  
+  // Calculate total price
+  const totalPrice = calculateTotalPrice();
+  
   return (
     <Card className="bg-card shadow-sm">
       <CardHeader>
@@ -98,7 +105,7 @@ const PaymentCalculator = ({
         <div className="space-y-2">
           <div className="flex justify-between pb-2 border-b">
             <span className="text-muted-foreground">Specifications</span>
-            <span>{printSpecs.paperSize}, {printSpecs.colorMode === 'blackAndWhite' ? 'B&W' : 'Color'}</span>
+            <span>{printSpecs.paperSize}, {printSpecs.colorMode === 'bw' ? 'B&W' : 'Color'}</span>
           </div>
           
           <div className="flex justify-between pb-2 border-b">
@@ -132,12 +139,12 @@ const PaymentCalculator = ({
             <span>Total Price</span>
             <span className="flex items-center">
               <DollarSign size={18} className="mr-1" />
-              {totalPrice ? totalPrice.toFixed(2) : '---'}
+              ${totalPrice.toFixed(2)}
             </span>
           </div>
           
           <div className="text-xs text-muted-foreground mt-1">
-            {printSpecs.doubleSided && <p>* 10% discount applied for double-sided printing</p>}
+            {printSpecs.doubleSided && <p>* 15% discount applied for double-sided printing</p>}
             {printSpecs.stapling && <p>* $0.50 additional fee for stapling</p>}
           </div>
         </div>
@@ -155,8 +162,8 @@ const PaymentCalculator = ({
           disabled={!isFormComplete || loading}
           onClick={handlePlaceOrder}
         >
-          <CreditCard size={16} />
-          {loading ? <Loader2 size={16} className="mr-2" /> : 'Place Order'}
+          {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : <CreditCard size={16} className="mr-2" />}
+          {loading ? 'Processing...' : 'Place Order'}
         </Button>
       </CardFooter>
     </Card>
