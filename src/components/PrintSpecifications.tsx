@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export type PaperSize = 'A4' | 'A3' | 'Letter' | 'Legal';
-export type ColorMode = 'color' | 'blackAndWhite';
+export type ColorMode = 'color' | 'bw'; // Updated to use 'bw' instead of 'blackAndWhite'
 
 export type PrintSpecs = {
   paperSize: PaperSize;
@@ -39,7 +39,7 @@ const PrintSpecifications = ({
 }) => {
   const [specs, setSpecs] = useState<PrintSpecs>({
     paperSize: 'A4',
-    colorMode: 'blackAndWhite',
+    colorMode: 'bw', // Changed default to 'bw'
     copies: 1,
     doubleSided: false,
     stapling: false,
@@ -207,7 +207,7 @@ const PrintSpecifications = ({
                   <SelectValue placeholder="Select color mode" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="blackAndWhite">Black & White</SelectItem>
+                  <SelectItem value="bw">Black & White</SelectItem>
                   <SelectItem value="color">Color</SelectItem>
                 </SelectContent>
               </Select>

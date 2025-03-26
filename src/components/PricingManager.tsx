@@ -23,7 +23,8 @@ type PricingManagerProps = {
 };
 
 const paperSizes = ['A4', 'A3', 'Letter', 'Legal'];
-const colorModes = ['color', 'blackAndWhite'];
+// Changed to match the database constraint - 'bw' and 'color'
+const colorModes = ['bw', 'color'];
 
 const PricingManager: React.FC<PricingManagerProps> = ({ shopId }) => {
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([]);
@@ -60,7 +61,7 @@ const PricingManager: React.FC<PricingManagerProps> = ({ shopId }) => {
       ...pricingItems,
       {
         paper_size: 'A4',
-        color_mode: 'blackAndWhite',
+        color_mode: 'bw', // Changed default to 'bw' instead of 'blackAndWhite'
         price_per_page: 0,
         isNew: true
       }
@@ -121,7 +122,7 @@ const PricingManager: React.FC<PricingManagerProps> = ({ shopId }) => {
       for (const item of pricingItems) {
         const config = `${item.paper_size}-${item.color_mode}`;
         if (configurations.has(config)) {
-          toast.error(`Duplicate configuration found: ${item.paper_size}, ${item.color_mode === 'blackAndWhite' ? 'Black & White' : 'Color'}`);
+          toast.error(`Duplicate configuration found: ${item.paper_size}, ${item.color_mode === 'bw' ? 'Black & White' : 'Color'}`);
           return;
         }
         configurations.add(config);
@@ -136,14 +137,14 @@ const PricingManager: React.FC<PricingManagerProps> = ({ shopId }) => {
             .insert({
               shop_id: shopId,
               paper_size: item.paper_size,
-              color_mode: item.color_mode,
+              color_mode: item.color_mode, // Now using 'bw' or 'color'
               price_per_page: item.price_per_page
             });
             
           if (error) {
             // Check if it's a duplicate key error
             if (error.code === '23505') {
-              throw new Error(`Pricing for ${item.paper_size}, ${item.color_mode === 'blackAndWhite' ? 'Black & White' : 'Color'} already exists`);
+              throw new Error(`Pricing for ${item.paper_size}, ${item.color_mode === 'bw' ? 'Black & White' : 'Color'} already exists`);
             }
             throw error;
           }
@@ -244,7 +245,7 @@ const PricingManager: React.FC<PricingManagerProps> = ({ shopId }) => {
                           <SelectValue placeholder="Color mode" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="blackAndWhite">Black & White</SelectItem>
+                          <SelectItem value="bw">Black & White</SelectItem>
                           <SelectItem value="color">Color</SelectItem>
                         </SelectContent>
                       </Select>
