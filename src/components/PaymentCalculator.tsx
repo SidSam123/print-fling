@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Calculator, DollarSign, CreditCard } from 'lucide-react';
+import { Calculator, DollarSign, CreditCard, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PrintSpecs } from './PrintSpecifications';
@@ -28,7 +28,7 @@ const PaymentCalculator: React.FC<PaymentCalculatorProps> = ({
   const calculateTotalPrice = () => {
     if (!printSpecs.pricePerPage) return null;
     
-    let numberOfPages = 1; // Placeholder - in a real app, we'd extract page count from the PDF
+    let numberOfPages = printSpecs.pageCount || 1; // Use the actual page count from the document
     let totalPrice = printSpecs.pricePerPage * numberOfPages * printSpecs.copies;
     
     // Apply discount for double-sided (in a real implementation, this would be more sophisticated)
@@ -98,6 +98,11 @@ const PaymentCalculator: React.FC<PaymentCalculatorProps> = ({
           </div>
           
           <div className="flex justify-between pb-2 border-b">
+            <span className="text-muted-foreground">Document Pages</span>
+            <span>{printSpecs.pageCount || 1}</span>
+          </div>
+          
+          <div className="flex justify-between pb-2 border-b">
             <span className="text-muted-foreground">Copies</span>
             <span>{printSpecs.copies}</span>
           </div>
@@ -111,6 +116,11 @@ const PaymentCalculator: React.FC<PaymentCalculatorProps> = ({
             <span className="text-muted-foreground">Stapling</span>
             <span>{printSpecs.stapling ? 'Yes' : 'No'}</span>
           </div>
+          
+          <div className="flex justify-between pb-2 border-b">
+            <span className="text-muted-foreground">Price per page</span>
+            <span>${printSpecs.pricePerPage?.toFixed(2) || '---'}</span>
+          </div>
         </div>
         
         <div className="mt-6">
@@ -120,6 +130,11 @@ const PaymentCalculator: React.FC<PaymentCalculatorProps> = ({
               <DollarSign size={18} className="mr-1" />
               {totalPrice ? totalPrice.toFixed(2) : '---'}
             </span>
+          </div>
+          
+          <div className="text-xs text-muted-foreground mt-1">
+            {printSpecs.doubleSided && <p>* 10% discount applied for double-sided printing</p>}
+            {printSpecs.stapling && <p>* $0.50 additional fee for stapling</p>}
           </div>
         </div>
         

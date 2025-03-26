@@ -19,6 +19,7 @@ export type PrintSpecs = {
   doubleSided: boolean;
   stapling: boolean;
   pricePerPage: number | null;
+  pageCount: number;
 };
 
 type PricingOption = {
@@ -29,10 +30,12 @@ type PricingOption = {
 
 const PrintSpecifications = ({ 
   shopId, 
-  onSpecsChange 
+  onSpecsChange,
+  documentPageCount
 }: { 
   shopId: string | null;
   onSpecsChange: (specs: PrintSpecs) => void;
+  documentPageCount?: number;
 }) => {
   const [specs, setSpecs] = useState<PrintSpecs>({
     paperSize: 'A4',
@@ -40,12 +43,23 @@ const PrintSpecifications = ({
     copies: 1,
     doubleSided: false,
     stapling: false,
-    pricePerPage: null
+    pricePerPage: null,
+    pageCount: documentPageCount || 1
   });
   
   const [pricingOptions, setPricingOptions] = useState<PricingOption[]>([]);
   
   const [loading, setLoading] = useState(false);
+
+  // Update page count when document changes
+  useEffect(() => {
+    if (documentPageCount) {
+      setSpecs(prev => ({
+        ...prev,
+        pageCount: documentPageCount
+      }));
+    }
+  }, [documentPageCount]);
 
   // Fetch pricing options when shop changes
   useEffect(() => {
@@ -200,16 +214,29 @@ const PrintSpecifications = ({
             </div>
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="copies">Number of Copies</Label>
-            <Input
-              id="copies"
-              type="number"
-              min="1"
-              value={specs.copies}
-              onChange={handleCopiesChange}
-              disabled={disabledState}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="copies">Number of Copies</Label>
+              <Input
+                id="copies"
+                type="number"
+                min="1"
+                value={specs.copies}
+                onChange={handleCopiesChange}
+                disabled={disabledState}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="page-count">Number of Pages</Label>
+              <Input
+                id="page-count"
+                type="number"
+                value={specs.pageCount}
+                readOnly
+                className="bg-muted"
+              />
+            </div>
           </div>
           
           <div className="flex items-center justify-between">
@@ -250,6 +277,16 @@ const PrintSpecifications = ({
           <div className="flex items-center gap-2 p-3 bg-amber-100/50 rounded-md text-sm text-amber-800">
             <Settings size={16} />
             <span>The selected shop doesn't have pricing for this configuration</span>
+          </div>
+        )}
+        
+        {specs.pricePerPage !== null && (
+          <div className="flex items-center gap-2 p-3 bg-green-100/50 rounded-md text-sm text-green-800">
+            <Settings size={16} />
+            <span>
+              Price per page: ${specs.pricePerPage} × {specs.pageCount} pages × {specs.copies} {specs.copies === 1 ? 'copy' : 'copies'}
+              {specs.doubleSided ? ' (double-sided discount applied)' : ''}
+            </span>
           </div>
         )}
       </CardContent>

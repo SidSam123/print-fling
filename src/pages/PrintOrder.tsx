@@ -11,7 +11,6 @@ import DocumentUpload, { UploadedFile } from '@/components/DocumentUpload';
 import ShopSelector from '@/components/ShopSelector';
 import PrintSpecifications, { PrintSpecs } from '@/components/PrintSpecifications';
 import PaymentCalculator from '@/components/PaymentCalculator';
-// import { supabase } from '@/lib/supabase';
 import { supabase } from '@/integrations/supabase/client';
 
 type Shop = {
@@ -35,7 +34,8 @@ const PrintOrder = () => {
     copies: 1,
     doubleSided: false,
     stapling: false,
-    pricePerPage: null
+    pricePerPage: null,
+    pageCount: 1
   });
   const [orderComplete, setOrderComplete] = useState(false);
 
@@ -44,7 +44,7 @@ const PrintOrder = () => {
     try {
       if (uploadedFile?.path) {
         await supabase.storage
-          .from('print-documents')
+          .from('documents')
           .remove([uploadedFile.path]);
         console.log('Cleaned up temporary upload');
       }
@@ -62,7 +62,8 @@ const PrintOrder = () => {
         copies: 1,
         doubleSided: false,
         stapling: false,
-        pricePerPage: null
+        pricePerPage: null,
+        pageCount: 1
       });
     }
   };
@@ -97,13 +98,21 @@ const PrintOrder = () => {
 
   const handleFileUploaded = (file: UploadedFile) => {
     // Clean up any existing uploaded file first
-    if (uploadedFile?.path) {
+    if (uploadedFile?.path && uploadedFile.path !== file.path) {
       cleanup().then(() => {
         setUploadedFile(file);
+        setPrintSpecs(prev => ({
+          ...prev,
+          pageCount: file.pageCount || 1
+        }));
         setActiveTab('shop');
       });
     } else {
       setUploadedFile(file);
+      setPrintSpecs(prev => ({
+        ...prev,
+        pageCount: file.pageCount || 1
+      }));
       setActiveTab('shop');
     }
   };
@@ -131,7 +140,8 @@ const PrintOrder = () => {
       copies: 1,
       doubleSided: false,
       stapling: false,
-      pricePerPage: null
+      pricePerPage: null,
+      pageCount: 1
     });
     setOrderComplete(false);
     setActiveTab('upload');
@@ -193,7 +203,7 @@ const PrintOrder = () => {
                   </div>
                 </div>
               ) : (
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
                   <TabsList className="grid grid-cols-4 mb-8">
                     <TabsTrigger value="upload" disabled={activeTab !== 'upload' && !uploadedFile}>
                       1. Upload
@@ -236,6 +246,7 @@ const PrintOrder = () => {
                     <PrintSpecifications 
                       shopId={selectedShop?.id || null}
                       onSpecsChange={handleSpecsChange}
+                      documentPageCount={uploadedFile?.pageCount || 1}
                     />
                     
                     <div className="flex justify-between mt-6">

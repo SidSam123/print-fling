@@ -6,10 +6,11 @@ import Navbar from '@/components/Navbar';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Printer, Settings, FileText, MapPin, Store, Clock, BarChart } from 'lucide-react';
+import { Plus, Printer, Settings, FileText, MapPin, Store, Clock, BarChart, Tag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import ShopLocationForm from '@/components/ShopLocationForm';
+import ShopPricingTab from '@/components/ShopPricingTab';
 
 const ShopkeeperDashboard = () => {
   const { user } = useAuth();
@@ -198,9 +199,10 @@ const ShopkeeperDashboard = () => {
               </Card>
             ) : (
               <Tabs defaultValue="shops" className="w-full animate-on-load">
-                <TabsList className="grid grid-cols-3 max-w-md mb-8">
+                <TabsList className="grid grid-cols-4 max-w-md mb-8">
                   <TabsTrigger value="shops">My Shops</TabsTrigger>
                   <TabsTrigger value="orders">Print Orders</TabsTrigger>
+                  <TabsTrigger value="pricing">Pricing</TabsTrigger>
                   <TabsTrigger value="settings">Settings</TabsTrigger>
                 </TabsList>
                 
@@ -290,6 +292,10 @@ const ShopkeeperDashboard = () => {
                       </div>
                     </CardContent>
                   </Card>
+                </TabsContent>
+                
+                <TabsContent value="pricing">
+                  <ShopPricingTab />
                 </TabsContent>
                 
                 <TabsContent value="settings">

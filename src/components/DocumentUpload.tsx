@@ -3,10 +3,15 @@ import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, Upload, Check, X, AlertTriangle } from 'lucide-react';
+import { Loader2, Upload, Check, X, AlertTriangle, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
+import DocumentPreview from './DocumentPreview';
+import { pdfjs } from 'react-pdf';
+
+// Set up PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 export interface UploadedFile {
   path: string;
@@ -14,6 +19,7 @@ export interface UploadedFile {
   size: number;
   type: string;
   url: string;
+  pageCount?: number;
 }
 
 interface DocumentUploadProps {
@@ -26,6 +32,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadedFileData, setUploadedFileData] = useState<UploadedFile | null>(null);
+  const [pageCount, setPageCount] = useState<number>(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,6 +57,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
       
       setFile(selectedFile);
       setUploadError(null);
+      setUploadedFileData(null); // Reset any previous upload
     }
   };
   
@@ -96,18 +105,22 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
       clearInterval(progressInterval);
       setProgress(100);
       
-      setUploading(false);
-      toast.success('Document uploaded successfully!');
-      
-      // Call the callback with the file details
-      onFileUploaded({
+      // Create uploaded file data object
+      const uploadedFile: UploadedFile = {
         path: filePath,
         name: file.name,
         size: file.size,
         type: file.type,
-        url: publicUrlData.publicUrl
-      });
+        url: publicUrlData.publicUrl,
+        pageCount: pageCount // Set initial page count
+      };
       
+      setUploadedFileData(uploadedFile);
+      setUploading(false);
+      toast.success('Document uploaded successfully!');
+      
+      // Call the callback with the file details
+      onFileUploaded(uploadedFile);
     } catch (error: any) {
       console.error('Error uploading file:', error);
       setUploadError(error.message || 'Failed to upload document');
@@ -119,69 +132,95 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
   const resetFileInput = () => {
     setFile(null);
     setUploadError(null);
+    setUploadedFileData(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+  
+  const handlePageCountChange = (count: number) => {
+    setPageCount(count);
+    
+    // Update the uploaded file data with the page count
+    if (uploadedFileData) {
+      const updatedFileData = {
+        ...uploadedFileData,
+        pageCount: count
+      };
+      
+      setUploadedFileData(updatedFileData);
+      
+      // Call the callback with the updated file details
+      onFileUploaded(updatedFileData);
     }
   };
   
   return (
     <Card className="bg-card shadow-sm">
       <CardContent className="p-6">
-        <div className="space-y-4">
-          <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 transition-colors hover:border-primary/50 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-            <input 
-              type="file" 
-              ref={fileInputRef}
-              className="hidden" 
-              onChange={handleFileChange}
-              accept=".pdf,.docx,.jpeg,.jpg,.png"
-              disabled={uploading}
-            />
-            
-            {!file ? (
-              <>
-                <Upload className="h-10 w-10 text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground text-center">
-                  Click to upload or drag and drop<br />
-                  PDF, DOCX, JPEG or PNG (max. 10MB)
-                </p>
-              </>
-            ) : (
-              <div className="flex flex-col items-center w-full">
-                <div className="flex items-center justify-between w-full">
-                  <Label className="font-medium truncate max-w-[200px]">{file.name}</Label>
-                  {!uploading && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-8 w-8 p-0" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        resetFileInput();
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                      <span className="sr-only">Remove file</span>
-                    </Button>
+        <div className="space-y-6">
+          {!uploadedFileData ? (
+            <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 transition-colors hover:border-primary/50 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+              <input 
+                type="file" 
+                ref={fileInputRef}
+                className="hidden" 
+                onChange={handleFileChange}
+                accept=".pdf,.docx,.jpeg,.jpg,.png"
+                disabled={uploading}
+              />
+              
+              {!file ? (
+                <>
+                  <Upload className="h-10 w-10 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground text-center">
+                    Click to upload or drag and drop<br />
+                    PDF, DOCX, JPEG or PNG (max. 10MB)
+                  </p>
+                </>
+              ) : (
+                <div className="flex flex-col items-center w-full">
+                  <div className="flex items-center justify-between w-full">
+                    <Label className="font-medium truncate max-w-[200px]">{file.name}</Label>
+                    {!uploading && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 w-8 p-0" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          resetFileInput();
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Remove file</span>
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {uploading && (
+                    <div className="w-full mt-2">
+                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-primary transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground text-center mt-1">
+                        Uploading... {progress}%
+                      </p>
+                    </div>
                   )}
                 </div>
-                
-                {uploading && (
-                  <div className="w-full mt-2">
-                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary transition-all duration-300"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground text-center mt-1">
-                      Uploading... {progress}%
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            <DocumentPreview 
+              url={uploadedFileData.url} 
+              name={uploadedFileData.name}
+              onPageCountChange={handlePageCountChange}
+            />
+          )}
           
           {uploadError && (
             <div className="flex items-center gap-2 text-destructive text-sm py-2 px-3 bg-destructive/10 rounded-lg">
@@ -191,24 +230,36 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
           )}
           
           <div className="flex justify-end">
-            <Button 
-              type="button" 
-              disabled={!file || uploading} 
-              onClick={handleUpload}
-              className="w-full sm:w-auto"
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Document
-                </>
-              )}
-            </Button>
+            {!uploadedFileData ? (
+              <Button 
+                type="button" 
+                disabled={!file || uploading} 
+                onClick={handleUpload}
+                className="w-full sm:w-auto"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Document
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={resetFileInput}
+                className="w-full sm:w-auto"
+              >
+                <X className="mr-2 h-4 w-4" />
+                Replace Document
+              </Button>
+            )}
           </div>
         </div>
       </CardContent>
