@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { CalendarDays, FileText, Clock, Printer, AlertTriangle, CheckCircle, Eye } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,12 +32,7 @@ const statusStyles = {
     textColor: 'text-yellow-800',
     icon: Clock,
   },
-  processing: {
-    bgColor: 'bg-blue-100',
-    textColor: 'text-blue-800',
-    icon: Printer,
-  },
-  ready: {
+  completed: {
     bgColor: 'bg-green-100',
     textColor: 'text-green-800',
     icon: CheckCircle,
@@ -132,7 +126,6 @@ const ActiveOrders = () => {
 
       if (error) throw error;
 
-      // Update local state
       setPrintJobs(prevJobs => 
         prevJobs.map(job => 
           job.id === jobId 

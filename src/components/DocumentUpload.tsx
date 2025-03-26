@@ -61,6 +61,17 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
     }
   };
   
+  const countPdfPages = async (pdfUrl: string): Promise<number> => {
+    try {
+      const loadingTask = pdfjs.getDocument(pdfUrl);
+      const pdf = await loadingTask.promise;
+      return pdf.numPages;
+    } catch (error) {
+      console.error('Error counting PDF pages:', error);
+      return 1; // Default to 1 if we can't determine
+    }
+  };
+  
   const handleUpload = async () => {
     if (!file || !user) return;
     
@@ -105,6 +116,17 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
       clearInterval(progressInterval);
       setProgress(100);
       
+      // For PDF files, count pages
+      let pdfPageCount = 1;
+      if (file.type === 'application/pdf') {
+        try {
+          pdfPageCount = await countPdfPages(publicUrlData.publicUrl);
+          console.log(`PDF has ${pdfPageCount} pages`);
+        } catch (error) {
+          console.error('Error counting PDF pages:', error);
+        }
+      }
+      
       // Create uploaded file data object
       const uploadedFile: UploadedFile = {
         path: filePath,
@@ -112,10 +134,11 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
         size: file.size,
         type: file.type,
         url: publicUrlData.publicUrl,
-        pageCount: pageCount // Set initial page count
+        pageCount: pdfPageCount
       };
       
       setUploadedFileData(uploadedFile);
+      setPageCount(pdfPageCount);
       setUploading(false);
       toast.success('Document uploaded successfully!');
       

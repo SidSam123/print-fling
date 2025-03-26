@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
-import { Eye, FileText, Clock, Printer, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Eye, FileText, Clock, Printer, AlertTriangle, CheckCircle, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type PrintJob = {
@@ -27,6 +27,7 @@ type PrintJob = {
   file_path: string;
   customer_id: string;
   customer_name?: string;
+  shop_name?: string;
 };
 
 type Shop = {
@@ -40,12 +41,7 @@ const statusStyles = {
     textColor: 'text-yellow-800',
     icon: Clock,
   },
-  processing: {
-    bgColor: 'bg-blue-100',
-    textColor: 'text-blue-800',
-    icon: Printer,
-  },
-  ready: {
+  completed: {
     bgColor: 'bg-green-100',
     textColor: 'text-green-800',
     icon: CheckCircle,
@@ -138,7 +134,7 @@ const ShopOrdersTab = () => {
       const jobsWithCustomerNames = data.map(job => ({
         ...job,
         customer_name: customersData?.find(c => c.id === job.customer_id)?.name || 'Unknown Customer',
-        shop_name: shops.find(s => s.id === job.shop_id)?.name
+        shop_name: shops.find(s => s.id === job.shop_id)?.name || 'Unknown Shop'
       }));
       
       setPrintJobs(jobsWithCustomerNames);
@@ -291,8 +287,7 @@ const ShopOrdersTab = () => {
             <TabsList className="mb-6">
               <TabsTrigger value="all">All Orders</TabsTrigger>
               <TabsTrigger value="pending">Pending</TabsTrigger>
-              <TabsTrigger value="processing">Processing</TabsTrigger>
-              <TabsTrigger value="ready">Ready</TabsTrigger>
+              <TabsTrigger value="completed">Completed</TabsTrigger>
               <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
             </TabsList>
             
@@ -381,36 +376,25 @@ const ShopOrdersTab = () => {
                           </Button>
                           
                           {job.status === 'pending' && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="bg-blue-50 text-blue-800 hover:bg-blue-100"
-                              onClick={() => updateOrderStatus(job.id, 'processing')}
-                            >
-                              Start Processing
-                            </Button>
-                          )}
-                          
-                          {job.status === 'processing' && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="bg-green-50 text-green-800 hover:bg-green-100"
-                              onClick={() => updateOrderStatus(job.id, 'ready')}
-                            >
-                              Mark as Ready
-                            </Button>
-                          )}
-                          
-                          {job.status === 'pending' && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="bg-red-50 text-red-800 hover:bg-red-100"
-                              onClick={() => updateOrderStatus(job.id, 'cancelled')}
-                            >
-                              Cancel Order
-                            </Button>
+                            <>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="bg-green-50 text-green-800 hover:bg-green-100"
+                                onClick={() => updateOrderStatus(job.id, 'completed')}
+                              >
+                                Mark Completed
+                              </Button>
+                              
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="bg-red-50 text-red-800 hover:bg-red-100"
+                                onClick={() => updateOrderStatus(job.id, 'cancelled')}
+                              >
+                                Cancel Order
+                              </Button>
+                            </>
                           )}
                         </div>
                       </div>

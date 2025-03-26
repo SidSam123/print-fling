@@ -12,6 +12,7 @@ import ShopSelector from '@/components/ShopSelector';
 import PrintSpecifications, { PrintSpecs } from '@/components/PrintSpecifications';
 import PaymentCalculator from '@/components/PaymentCalculator';
 import { supabase } from '@/integrations/supabase/client';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type Shop = {
   id: string;
@@ -30,7 +31,7 @@ const PrintOrder = () => {
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [printSpecs, setPrintSpecs] = useState<PrintSpecs>({
     paperSize: 'A4',
-    colorMode: 'bw', // Updated to 'bw' instead of 'blackAndWhite'
+    colorMode: 'bw',
     copies: 1,
     doubleSided: false,
     stapling: false,
@@ -38,6 +39,7 @@ const PrintOrder = () => {
     pageCount: 1
   });
   const [orderComplete, setOrderComplete] = useState(false);
+  const [viewingDocument, setViewingDocument] = useState(false);
 
   // Cleanup function
   const cleanup = async () => {
@@ -58,7 +60,7 @@ const PrintOrder = () => {
       setSelectedShop(null);
       setPrintSpecs({
         paperSize: 'A4',
-        colorMode: 'bw', // Updated to 'bw' instead of 'blackAndWhite'
+        colorMode: 'bw',
         copies: 1,
         doubleSided: false,
         stapling: false,
@@ -136,7 +138,7 @@ const PrintOrder = () => {
     setSelectedShop(null);
     setPrintSpecs({
       paperSize: 'A4',
-      colorMode: 'bw', // Updated to 'bw' instead of 'blackAndWhite'
+      colorMode: 'bw',
       copies: 1,
       doubleSided: false,
       stapling: false,
@@ -158,6 +160,13 @@ const PrintOrder = () => {
       return;
     }
     setActiveTab(value);
+  };
+
+  // View document handler
+  const handleViewDocument = () => {
+    if (uploadedFile) {
+      setViewingDocument(true);
+    }
   };
 
   return (
@@ -224,6 +233,18 @@ const PrintOrder = () => {
                   </TabsContent>
                   
                   <TabsContent value="shop">
+                    {uploadedFile && (
+                      <div className="mb-6 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium">Uploaded document: {uploadedFile.name}</p>
+                          <p className="text-sm text-muted-foreground">Pages: {uploadedFile.pageCount || '1'}</p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={handleViewDocument}>
+                          View Document
+                        </Button>
+                      </div>
+                    )}
+                    
                     <ShopSelector onShopSelected={handleShopSelected} />
                     
                     <div className="flex justify-between mt-6">
@@ -243,6 +264,18 @@ const PrintOrder = () => {
                   </TabsContent>
                   
                   <TabsContent value="specs">
+                    {uploadedFile && (
+                      <div className="mb-6 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium">Uploaded document: {uploadedFile.name}</p>
+                          <p className="text-sm text-muted-foreground">Pages: {uploadedFile.pageCount || '1'}</p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={handleViewDocument}>
+                          View Document
+                        </Button>
+                      </div>
+                    )}
+                    
                     <PrintSpecifications 
                       shopId={selectedShop?.id || null}
                       onSpecsChange={handleSpecsChange}
@@ -266,6 +299,18 @@ const PrintOrder = () => {
                   </TabsContent>
                   
                   <TabsContent value="payment">
+                    {uploadedFile && (
+                      <div className="mb-6 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium">Uploaded document: {uploadedFile.name}</p>
+                          <p className="text-sm text-muted-foreground">Pages: {uploadedFile.pageCount || '1'}</p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={handleViewDocument}>
+                          View Document
+                        </Button>
+                      </div>
+                    )}
+                    
                     <PaymentCalculator 
                       printSpecs={printSpecs}
                       shopId={selectedShop?.id || null}
@@ -288,6 +333,24 @@ const PrintOrder = () => {
           </div>
         </div>
       </div>
+      
+      {/* Document preview dialog */}
+      <Dialog open={viewingDocument} onOpenChange={setViewingDocument}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Document Preview</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            {uploadedFile && (
+              <iframe 
+                src={uploadedFile.url} 
+                className="w-full h-full min-h-[70vh]" 
+                title="Document Preview"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </UserRedirect>
   );
 };
