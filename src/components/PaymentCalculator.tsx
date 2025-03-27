@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, LucideIndianRupee, Calculator } from 'lucide-react';
+import GooglePayButton from '@/components/GooglePayButton';
 
 interface PaymentCalculatorProps {
   printSpecs: PrintSpecs;
@@ -23,6 +24,7 @@ const PaymentCalculator = ({
 }: PaymentCalculatorProps) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [showGooglePay, setShowGooglePay] = useState(false);
   
   const calculateTotalPrice = () => {
     if (!printSpecs.pricePerPage) return 0;
@@ -61,6 +63,11 @@ const PaymentCalculator = ({
       return;
     }
     
+    // Show the Google Pay payment option instead of placing order directly
+    setShowGooglePay(true);
+  };
+  
+  const handlePaymentSuccess = async () => {
     setLoading(true);
     try {
       const totalPrice = calculateTotalPrice();
@@ -69,7 +76,7 @@ const PaymentCalculator = ({
       const { data, error } = await supabase
         .from('print_jobs')
         .insert({
-          customer_id: user.id,
+          customer_id: user?.id,
           shop_id: shopId,
           file_path: documentPath,
           paper_size: printSpecs.paperSize,
@@ -163,15 +170,33 @@ const PaymentCalculator = ({
           </div>
         )}
       </CardContent>
-      <CardFooter>
-        <Button 
-          className="w-full flex items-center gap-2" 
-          disabled={!isFormComplete || loading}
-          onClick={handlePlaceOrder}
-        >
-          {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
-          {loading ? 'Processing...' : 'Place Order'}
-        </Button>
+      <CardFooter className="flex flex-col gap-3">
+        {showGooglePay ? (
+          <>
+            <GooglePayButton 
+              amount={totalPrice}
+              onPaymentSuccess={handlePaymentSuccess}
+              disabled={!isFormComplete || loading}
+            />
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => setShowGooglePay(false)}
+              disabled={loading}
+            >
+              Back to Order Summary
+            </Button>
+          </>
+        ) : (
+          <Button 
+            className="w-full flex items-center gap-2" 
+            disabled={!isFormComplete || loading}
+            onClick={handlePlaceOrder}
+          >
+            {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
+            {loading ? 'Processing...' : 'Proceed to Payment'}
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );
