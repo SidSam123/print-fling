@@ -7,7 +7,11 @@ import { toast } from 'sonner';
 // Define Google Pay API types properly to avoid TypeScript errors
 declare global {
   interface Window {
-    google?: any; // Use any for the global google object to avoid conflicts
+    google?: {
+      payments?: {
+        api?: any;
+      };
+    };
   }
 }
 

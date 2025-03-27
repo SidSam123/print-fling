@@ -50,6 +50,14 @@ CREATE TABLE IF NOT EXISTS public.shop_pricing (
   UNIQUE(shop_id, paper_size, color_mode)
 );
 
+-- Add upi_id column to shops table
+ALTER TABLE shops
+ADD COLUMN IF NOT EXISTS upi_id TEXT;
+
+-- Add payment_status column to print_jobs table
+ALTER TABLE print_jobs
+ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'pending';
+
 -- Add RLS policies for shop_pricing
 ALTER TABLE public.shop_pricing ENABLE ROW LEVEL SECURITY;
 

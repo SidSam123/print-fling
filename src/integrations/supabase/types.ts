@@ -19,6 +19,7 @@ export type Database = {
           file_path: string
           id: string
           paper_size: string
+          payment_status: string | null
           price: number | null
           shop_id: string
           stapling: boolean
@@ -34,6 +35,7 @@ export type Database = {
           file_path: string
           id?: string
           paper_size: string
+          payment_status?: string | null
           price?: number | null
           shop_id: string
           stapling?: boolean
@@ -49,6 +51,7 @@ export type Database = {
           file_path?: string
           id?: string
           paper_size?: string
+          payment_status?: string | null
           price?: number | null
           shop_id?: string
           stapling?: boolean
@@ -139,6 +142,7 @@ export type Database = {
           owner_id: string
           phone: string | null
           updated_at: string
+          upi_id: string | null
         }
         Insert: {
           address: string
@@ -151,6 +155,7 @@ export type Database = {
           owner_id: string
           phone?: string | null
           updated_at?: string
+          upi_id?: string | null
         }
         Update: {
           address?: string
@@ -163,6 +168,7 @@ export type Database = {
           owner_id?: string
           phone?: string | null
           updated_at?: string
+          upi_id?: string | null
         }
         Relationships: []
       }
