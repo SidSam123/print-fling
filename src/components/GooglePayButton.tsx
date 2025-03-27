@@ -4,14 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Define Google Pay API types properly to avoid TypeScript errors
+// Define Google Pay API types in a way that won't conflict with other declarations
 declare global {
   interface Window {
-    google?: {
-      payments?: {
-        api?: any;
-      };
-    };
+    google: any; // Use any for the global google object to avoid conflicts
   }
 }
 

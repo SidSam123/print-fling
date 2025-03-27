@@ -88,7 +88,7 @@ const PaymentCalculator = ({
       return;
     }
     
-    // Show the Google Pay payment option instead of placing order directly
+    // Show the Google Pay payment option
     setShowGooglePay(true);
   };
   
