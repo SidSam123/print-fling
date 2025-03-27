@@ -1,14 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PrintSpecs } from '@/components/PrintSpecifications';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, LucideIndianRupee, Calculator, AlertCircle } from 'lucide-react';
-import GooglePayButton from '@/components/GooglePayButton';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, LucideIndianRupee, Calculator } from 'lucide-react';
 
 interface PaymentCalculatorProps {
   printSpecs: PrintSpecs;
@@ -25,31 +23,6 @@ const PaymentCalculator = ({
 }: PaymentCalculatorProps) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [showGooglePay, setShowGooglePay] = useState(false);
-  const [shopUpiId, setShopUpiId] = useState<string | null>(null);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-  
-  // Fetch shop UPI ID when shop is selected
-  useEffect(() => {
-    if (shopId) {
-      fetchShopUpiId(shopId);
-    }
-  }, [shopId]);
-  
-  const fetchShopUpiId = async (shopId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('shops')
-        .select('upi_id')
-        .eq('id', shopId)
-        .single();
-        
-      if (error) throw error;
-      setShopUpiId(data?.upi_id || null);
-    } catch (error) {
-      console.error('Error fetching shop UPI ID:', error);
-    }
-  };
   
   const calculateTotalPrice = () => {
     if (!printSpecs.pricePerPage) return 0;
@@ -88,11 +61,6 @@ const PaymentCalculator = ({
       return;
     }
     
-    // Show the Google Pay payment option
-    setShowGooglePay(true);
-  };
-  
-  const handlePaymentSuccess = async () => {
     setLoading(true);
     try {
       const totalPrice = calculateTotalPrice();
@@ -101,7 +69,7 @@ const PaymentCalculator = ({
       const { data, error } = await supabase
         .from('print_jobs')
         .insert({
-          customer_id: user?.id,
+          customer_id: user.id,
           shop_id: shopId,
           file_path: documentPath,
           paper_size: printSpecs.paperSize,
@@ -110,8 +78,7 @@ const PaymentCalculator = ({
           double_sided: printSpecs.doubleSided,
           stapling: printSpecs.stapling,
           price: totalPrice,
-          status: 'pending',
-          payment_status: 'paid'
+          status: 'pending'
         })
         .select('id');
         
@@ -120,13 +87,8 @@ const PaymentCalculator = ({
         throw new Error(error.message);
       }
       
-      setPaymentSuccess(true);
       toast.success('Order placed successfully!');
-      
-      // After a short delay, call the onOrderPlaced callback
-      setTimeout(() => {
-        onOrderPlaced();
-      }, 3000);
+      onOrderPlaced();
     } catch (error: any) {
       console.error('Error placing order:', error);
       toast.error(error.message || 'Failed to place order');
@@ -194,15 +156,6 @@ const PaymentCalculator = ({
           </div>
         </div>
         
-        {paymentSuccess && shopUpiId && (
-          <Alert className="mt-4 bg-green-50 border-green-200">
-            <AlertCircle className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-600">
-              Payment successful! Your order has been placed.
-            </AlertDescription>
-          </Alert>
-        )}
-        
         {!isFormComplete && (
           <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md text-sm text-muted-foreground mt-4">
             <Calculator size={16} />
@@ -210,41 +163,15 @@ const PaymentCalculator = ({
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex flex-col gap-3">
-        {paymentSuccess ? (
-          <Button 
-            variant="outline" 
-            className="w-full" 
-            onClick={onOrderPlaced}
-          >
-            Continue to Dashboard
-          </Button>
-        ) : showGooglePay ? (
-          <>
-            <GooglePayButton 
-              amount={totalPrice}
-              onPaymentSuccess={handlePaymentSuccess}
-              disabled={!isFormComplete || loading}
-            />
-            <Button 
-              variant="outline" 
-              className="w-full" 
-              onClick={() => setShowGooglePay(false)}
-              disabled={loading}
-            >
-              Back to Order Summary
-            </Button>
-          </>
-        ) : (
-          <Button 
-            className="w-full flex items-center gap-2" 
-            disabled={!isFormComplete || loading}
-            onClick={handlePlaceOrder}
-          >
-            {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
-            {loading ? 'Processing...' : 'Proceed to Payment'}
-          </Button>
-        )}
+      <CardFooter>
+        <Button 
+          className="w-full flex items-center gap-2" 
+          disabled={!isFormComplete || loading}
+          onClick={handlePlaceOrder}
+        >
+          {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
+          {loading ? 'Processing...' : 'Place Order'}
+        </Button>
       </CardFooter>
     </Card>
   );
