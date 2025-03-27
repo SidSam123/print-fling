@@ -13,6 +13,7 @@ import PrintSpecifications, { PrintSpecs } from '@/components/PrintSpecification
 import PaymentCalculator from '@/components/PaymentCalculator';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from '@/components/ui/use-toast';
 
 type Shop = {
   id: string;
@@ -29,6 +30,7 @@ const PrintOrder = () => {
   const [activeTab, setActiveTab] = useState('upload');
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
+  const [isChangingTab, setIsChangingTab] = useState(false);
   const [printSpecs, setPrintSpecs] = useState<PrintSpecs>({
     paperSize: 'A4',
     colorMode: 'bw',
@@ -40,6 +42,54 @@ const PrintOrder = () => {
   });
   const [orderComplete, setOrderComplete] = useState(false);
   const [viewingDocument, setViewingDocument] = useState(false);
+
+  // Watch for auth changes
+  useEffect(() => {
+    if (!user) {
+      // User has logged out, perform cleanup
+      handleSessionCleanup();
+    }
+  }, [user]);
+
+  // Session cleanup handler
+  const handleSessionCleanup = async () => {
+    try {
+      // Clean up any uploaded files
+      if (uploadedFile?.path) {
+        try {
+          await supabase.storage
+            .from('documents')
+            .remove([uploadedFile.path]);
+          console.log('Cleaned up temporary upload on session end');
+        } catch (error) {
+          console.error('Error cleaning up file on session end:', error);
+        }
+      }
+
+      // Clear all storage
+      localStorage.removeItem('print-order-state');
+      sessionStorage.removeItem('print-order-state');
+
+      // Reset all state
+      setUploadedFile(null);
+      setSelectedShop(null);
+      setPrintSpecs({
+        paperSize: 'A4',
+        colorMode: 'bw',
+        copies: 1,
+        doubleSided: false,
+        stapling: false,
+        pricePerPage: null,
+        pageCount: 1
+      });
+      setActiveTab('upload');
+      setOrderComplete(false);
+      setViewingDocument(false);
+      setIsChangingTab(false);
+    } catch (error) {
+      console.error('Error during session cleanup:', error);
+    }
+  };
 
   // Cleanup function
   const cleanup = async () => {
@@ -53,27 +103,29 @@ const PrintOrder = () => {
     } catch (error) {
       console.error('Error cleaning up:', error);
     } finally {
-      // Clear all print order related state and storage
-      localStorage.removeItem('print-order-state');
-      sessionStorage.removeItem('print-order-state');
-      setUploadedFile(null);
-      setSelectedShop(null);
-      setPrintSpecs({
-        paperSize: 'A4',
-        colorMode: 'bw',
-        copies: 1,
-        doubleSided: false,
-        stapling: false,
-        pricePerPage: null,
-        pageCount: 1
-      });
+      await handleSessionCleanup();
     }
   };
 
   // Handle navigation back to dashboard
   const handleBackToDashboard = async () => {
-    await cleanup();
-    navigate('/customer-dashboard');
+    // If there's an active print job in progress, show confirmation
+    if (uploadedFile && !orderComplete) {
+      const confirmed = window.confirm('Going back will cancel your current print job. Continue?');
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    try {
+      setIsChangingTab(true);
+      await cleanup();
+      navigate('/customer-dashboard');
+    } catch (error) {
+      console.error('Error navigating back:', error);
+    } finally {
+      setIsChangingTab(false);
+    }
   };
 
   // Cleanup on component unmount
@@ -151,14 +203,32 @@ const PrintOrder = () => {
 
   // Handle tab change
   const handleTabChange = async (value: string) => {
+    if (isChangingTab) return; // Prevent multiple calls while changing tabs
+    
     // If going back to upload when we already have a file, confirm first
     if (value === 'upload' && uploadedFile) {
-      if (window.confirm('Going back to upload will remove your current file. Continue?')) {
-        await cleanup();
-        setActiveTab(value);
+      setIsChangingTab(true);
+      try {
+        const confirmed = window.confirm('Going back to upload will remove your current file. Continue?');
+        if (confirmed) {
+          await cleanup();
+          // Double-check tab states after cleanup
+          if (printSpecs.pricePerPage !== null) {
+            setPrintSpecs(prev => ({ ...prev, pricePerPage: null }));
+          }
+        }
+      } finally {
+        setIsChangingTab(false);
       }
       return;
     }
+    
+    // Validate tab transitions
+    if (value === 'shop' && !uploadedFile) return;
+    if (value === 'specs' && !selectedShop) return;
+    if (value === 'payment' && printSpecs.pricePerPage === null) return;
+    
+    // For all other tab changes, just update the active tab
     setActiveTab(value);
   };
 
@@ -214,16 +284,16 @@ const PrintOrder = () => {
               ) : (
                 <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
                   <TabsList className="grid grid-cols-4 mb-8">
-                    <TabsTrigger value="upload" disabled={activeTab !== 'upload' && !uploadedFile}>
+                    <TabsTrigger value="upload" disabled={isChangingTab}>
                       1. Upload
                     </TabsTrigger>
-                    <TabsTrigger value="shop" disabled={activeTab !== 'shop' && (!uploadedFile || !selectedShop)}>
+                    <TabsTrigger value="shop" disabled={!uploadedFile || isChangingTab}>
                       2. Choose Shop
                     </TabsTrigger>
-                    <TabsTrigger value="specs" disabled={activeTab !== 'specs' && (!selectedShop || printSpecs.pricePerPage === null)}>
+                    <TabsTrigger value="specs" disabled={!selectedShop || !uploadedFile || isChangingTab}>
                       3. Specifications
                     </TabsTrigger>
-                    <TabsTrigger value="payment" disabled={activeTab !== 'payment' && printSpecs.pricePerPage === null}>
+                    <TabsTrigger value="payment" disabled={!selectedShop || !uploadedFile || printSpecs.pricePerPage === null || isChangingTab}>
                       4. Payment
                     </TabsTrigger>
                   </TabsList>

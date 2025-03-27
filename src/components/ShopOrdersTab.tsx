@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, FileText, Clock, Printer, AlertTriangle, CheckCircle, 
@@ -60,18 +59,55 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
   const [viewingDocument, setViewingDocument] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null);
+  const [shops, setShops] = useState<any[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
 
-  const fetchPrintJobs = async () => {
-    if (!user || !shopId) return;
+  useEffect(() => {
+    const fetchUserShops = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('shops')
+          .select('*')
+          .eq('owner_id', user.id);
+          
+        if (error) {
+          console.error('Error fetching shops:', error);
+          toast.error('Failed to load shops');
+          return;
+        }
+        
+        if (data && data.length > 0) {
+          setShops(data);
+          setSelectedShopId(shopId || data[0].id);
+        }
+      } catch (error) {
+        console.error('Error in fetchUserShops:', error);
+      }
+    };
+    
+    fetchUserShops();
+  }, [user, shopId]);
+
+  useEffect(() => {
+    if (selectedShopId) {
+      fetchPrintJobs(selectedShopId);
+    }
+  }, [selectedShopId, user]);
+
+  const fetchPrintJobs = async (currentShopId: string) => {
+    if (!user || !currentShopId) return;
 
     try {
       setLoading(true);
       
-      // Fetch all print jobs for this shop
+      console.log('Fetching print jobs for shop:', currentShopId);
+      
       const { data: jobsData, error: jobsError } = await supabase
         .from('print_jobs')
         .select('*')
-        .eq('shop_id', shopId)
+        .eq('shop_id', currentShopId)
         .order('created_at', { ascending: false });
 
       if (jobsError) {
@@ -81,16 +117,16 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         return;
       }
 
+      console.log('Fetched jobs data:', jobsData);
+
       if (!jobsData || jobsData.length === 0) {
         setPrintJobs([]);
         setLoading(false);
         return;
       }
 
-      // Get all unique customer IDs to fetch their names
       const customerIds = [...new Set(jobsData.map(job => job.customer_id))];
       
-      // Fetch customer profiles to get names
       const { data: customersData, error: customersError } = await supabase
         .from('profiles')
         .select('id, name')
@@ -101,7 +137,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         toast.error('Failed to load customer details');
       }
 
-      // Map customer names to print jobs
       const jobsWithCustomerNames = jobsData.map(job => ({
         ...job,
         customer_name: customersData?.find(c => c.id === job.customer_id)?.name || 'Unknown Customer',
@@ -115,12 +150,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (shopId) {
-      fetchPrintJobs();
-    }
-  }, [shopId, user]);
 
   const markJobAsCompleted = async (jobId: string) => {
     try {
@@ -211,6 +240,57 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
     );
   }
 
+  if (!selectedShopId && shops.length > 0) {
+    return (
+      <Card className="bg-card shadow-sm">
+        <CardHeader>
+          <CardTitle>Select Shop</CardTitle>
+          <CardDescription>
+            Choose a shop to view print orders
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4">
+            {shops.map(shop => (
+              <Button 
+                key={shop.id} 
+                variant="outline" 
+                className="justify-start h-auto p-4 text-left" 
+                onClick={() => setSelectedShopId(shop.id)}
+              >
+                <div>
+                  <h3 className="font-medium">{shop.name}</h3>
+                  <p className="text-sm text-muted-foreground">{shop.address}</p>
+                </div>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (shops.length === 0) {
+    return (
+      <Card className="bg-card shadow-sm">
+        <CardHeader>
+          <CardTitle>No Shops Found</CardTitle>
+          <CardDescription>
+            Register a shop to manage print orders
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center py-8">
+          <div className="p-5 bg-muted rounded-full mb-5">
+            <Printer size={48} className="text-muted-foreground" />
+          </div>
+          <p className="text-sm text-muted-foreground max-w-md mt-2 text-center">
+            You don't have any registered shops. Create a shop first to manage print orders.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <>
       <Card className="bg-card shadow-sm">
@@ -221,6 +301,21 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {shops.length > 1 && (
+            <div className="mb-4">
+              <label className="text-sm font-medium mb-2 block">Select Shop</label>
+              <select 
+                className="w-full p-2 border rounded-md"
+                value={selectedShopId || ''}
+                onChange={(e) => setSelectedShopId(e.target.value)}
+              >
+                {shops.map(shop => (
+                  <option key={shop.id} value={shop.id}>{shop.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          
           <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-4">
               <TabsTrigger value="pending">Pending</TabsTrigger>
@@ -354,7 +449,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         </CardContent>
       </Card>
 
-      {/* Document Preview Dialog */}
       <Dialog open={!!viewingDocument} onOpenChange={() => setViewingDocument(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -372,7 +466,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         </DialogContent>
       </Dialog>
 
-      {/* Cancel Confirmation Dialog */}
       <Dialog open={!!confirmingCancelId} onOpenChange={() => setConfirmingCancelId(null)}>
         <DialogContent>
           <DialogHeader>

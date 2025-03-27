@@ -6,7 +6,7 @@ import { PrintSpecs } from '@/components/PrintSpecifications';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { Wallet, CreditCard, Loader2, DollarSign, Calculator } from 'lucide-react';
+import { Loader2, LucideIndianRupee, Calculator } from 'lucide-react';
 
 interface PaymentCalculatorProps {
   printSpecs: PrintSpecs;
@@ -27,18 +27,26 @@ const PaymentCalculator = ({
   const calculateTotalPrice = () => {
     if (!printSpecs.pricePerPage) return 0;
     
-    // Base calculation
-    let basePrice = printSpecs.pricePerPage * printSpecs.pageCount * printSpecs.copies;
+    // Base calculation - price per page × total pages × number of copies
+    let totalPages = printSpecs.pageCount;
     
-    // Apply double-sided discount if enabled (15% off)
-    if (printSpecs.doubleSided) {
-      basePrice = basePrice * 0.85;
+    // If double-sided, we need to adjust the effective page count for pricing
+    // (but we don't reduce the actual number of pages that need to be printed)
+    let effectivePages = totalPages;
+    if (printSpecs.doubleSided && totalPages > 1) {
+      // For double-sided, we calculate ceiling of pages/2 for sheets needed
+      // then multiply by 2 for actual printed sides
+      const sheetsNeeded = Math.ceil(totalPages / 2);
+      effectivePages = sheetsNeeded * 2;
     }
     
-    // Apply stapling fee if enabled (add $0.50)
-    const staplingFee = printSpecs.stapling ? 0.5 : 0;
+    // Calculate base price using the correct price per page from the shop's pricing
+    const basePrice = printSpecs.pricePerPage * effectivePages * printSpecs.copies;
     
-    // Return formatted to 2 decimal places
+    // Apply stapling fee if enabled (Rs 5.00 per document)
+    const staplingFee = printSpecs.stapling ? 5.00 * printSpecs.copies : 0;
+    
+    // Return the total, rounded to 2 decimal places
     return Math.round((basePrice + staplingFee) * 100) / 100;
   };
 
@@ -130,7 +138,7 @@ const PaymentCalculator = ({
           
           <div className="flex justify-between pb-2 border-b">
             <span className="text-muted-foreground">Price per page</span>
-            <span>${printSpecs.pricePerPage?.toFixed(2) || '---'}</span>
+            <span className='flex items-center'><LucideIndianRupee size={14} className="mr-1" />{printSpecs.pricePerPage?.toFixed(2) || '---'}</span>
           </div>
         </div>
         
@@ -138,14 +146,13 @@ const PaymentCalculator = ({
           <div className="flex justify-between items-center py-2 font-medium text-lg">
             <span>Total Price</span>
             <span className="flex items-center">
-              <DollarSign size={18} className="mr-1" />
-              ${totalPrice.toFixed(2)}
+              <LucideIndianRupee size={18} className="mr-1" />
+              {totalPrice.toFixed(2)}
             </span>
           </div>
           
           <div className="text-xs text-muted-foreground mt-1">
-            {printSpecs.doubleSided && <p>* 15% discount applied for double-sided printing</p>}
-            {printSpecs.stapling && <p>* $0.50 additional fee for stapling</p>}
+            {printSpecs.stapling && <p>* ₹5.00 additional fee for stapling per copy</p>}
           </div>
         </div>
         
@@ -162,7 +169,7 @@ const PaymentCalculator = ({
           disabled={!isFormComplete || loading}
           onClick={handlePlaceOrder}
         >
-          {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : <CreditCard size={16} className="mr-2" />}
+          {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
           {loading ? 'Processing...' : 'Place Order'}
         </Button>
       </CardFooter>

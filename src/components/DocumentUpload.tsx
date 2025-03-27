@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -58,6 +57,30 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
       setFile(selectedFile);
       setUploadError(null);
       setUploadedFileData(null); // Reset any previous upload
+
+      // If it's a PDF, try to count pages client-side before upload
+      if (selectedFile.type === 'application/pdf') {
+        countPdfPagesClientSide(selectedFile);
+      }
+    }
+  };
+  
+  // Count PDF pages on client-side before upload
+  const countPdfPagesClientSide = async (pdfFile: File) => {
+    try {
+      const fileURL = URL.createObjectURL(pdfFile);
+      const loadingTask = pdfjs.getDocument(fileURL);
+      const pdf = await loadingTask.promise;
+      const numPages = pdf.numPages;
+      
+      console.log(`PDF has ${numPages} pages (client-side count)`);
+      setPageCount(numPages);
+      
+      // Clean up the object URL to avoid memory leaks
+      URL.revokeObjectURL(fileURL);
+    } catch (error) {
+      console.error('Error counting PDF pages client-side:', error);
+      // Don't set error, just use default page count of 1
     }
   };
   
@@ -117,11 +140,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
       setProgress(100);
       
       // For PDF files, count pages
-      let pdfPageCount = 1;
-      if (file.type === 'application/pdf') {
+      let pdfPageCount = pageCount; // Use existing count from client-side
+      if (file.type === 'application/pdf' && pdfPageCount === 1) {
         try {
+          // Try getting page count again from server URL
           pdfPageCount = await countPdfPages(publicUrlData.publicUrl);
-          console.log(`PDF has ${pdfPageCount} pages`);
+          console.log(`PDF has ${pdfPageCount} pages (server-side count)`);
         } catch (error) {
           console.error('Error counting PDF pages:', error);
         }
@@ -221,6 +245,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
                     )}
                   </div>
                   
+                  {file.type === 'application/pdf' && pageCount > 1 && (
+                    <div className="text-sm text-muted-foreground mt-1">
+                      {pageCount} pages detected
+                    </div>
+                  )}
+                  
                   {uploading && (
                     <div className="w-full mt-2">
                       <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
@@ -291,3 +321,4 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onFileUploaded }) => {
 };
 
 export default DocumentUpload;
+

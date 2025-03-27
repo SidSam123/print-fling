@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Map, Store, Navigation, MapPin } from 'lucide-react';
+import { Map, Store, Navigation, MapPin, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,6 +25,7 @@ type Location = {
 const ShopSelector = ({ onShopSelected }: { onShopSelected: (shop: Shop) => void }) => {
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [userLocation, setUserLocation] = useState<Location | null>(null);
   const [locationAddress, setLocationAddress] = useState<string>('');
@@ -37,19 +38,31 @@ const ShopSelector = ({ onShopSelected }: { onShopSelected: (shop: Shop) => void
   const fetchShops = async () => {
     try {
       setLoading(true);
+      setError(null);
       const { data, error } = await supabase
         .from('shops')
         .select('id, name, address, description, latitude, longitude');
         
       if (error) throw error;
       
-      setShops(data || []);
+      if (!data || data.length === 0) {
+        setShops([]);
+        return;
+      }
+      
+      setShops(data);
     } catch (error: any) {
       console.error('Error fetching shops:', error);
+      setError(error.message || 'Failed to load print shops');
       toast.error(error.message || 'Failed to load print shops');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Add retry functionality
+  const handleRetry = () => {
+    fetchShops();
   };
 
   const handleSelectShop = (shop: Shop) => {
@@ -126,6 +139,25 @@ const ShopSelector = ({ onShopSelected }: { onShopSelected: (shop: Shop) => void
               <Store size={24} className="text-primary" />
             </div>
             <h3 className="text-xl font-medium">Loading Shops...</h3>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="bg-card shadow-sm">
+        <CardContent className="p-6">
+          <div className="flex flex-col items-center gap-4">
+            <div className="p-4 bg-red-100 rounded-full">
+              <AlertTriangle size={24} className="text-red-600" />
+            </div>
+            <h3 className="text-xl font-medium text-center">Failed to load shops</h3>
+            <p className="text-sm text-muted-foreground text-center">{error}</p>
+            <Button onClick={handleRetry} variant="outline">
+              Try Again
+            </Button>
           </div>
         </CardContent>
       </Card>

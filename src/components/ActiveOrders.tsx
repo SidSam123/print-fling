@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, FileText, Clock, Printer, AlertTriangle, CheckCircle, Eye } from 'lucide-react';
+import { CalendarDays, FileText, Clock, Printer, AlertTriangle, CheckCircle, Eye, LucideIndianRupee } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -61,17 +61,12 @@ const ActiveOrders = () => {
         .from('print_jobs')
         .select('*')
         .eq('customer_id', user.id)
+        .not('status', 'eq', 'cancelled')
         .order('created_at', { ascending: false });
 
       if (jobsError) {
         console.error('Error fetching jobs:', jobsError);
         toast.error('Failed to load your orders. Please refresh the page.');
-        setLoading(false);
-        return;
-      }
-
-      if (!jobsData || jobsData.length === 0) {
-        setPrintJobs([]);
         setLoading(false);
         return;
       }
@@ -112,8 +107,24 @@ const ActiveOrders = () => {
 
     loadJobs();
 
+    const channel = supabase
+      .channel('public:print_jobs')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'print_jobs',
+          filter: `customer_id=eq.${user?.id}`
+        }, 
+        () => {
+          fetchPrintJobs();
+        }
+      )
+      .subscribe();
+
     return () => {
       mounted = false;
+      supabase.removeChannel(channel);
     };
   }, [user]);
 
@@ -127,13 +138,8 @@ const ActiveOrders = () => {
 
       if (error) throw error;
 
-      setPrintJobs(prevJobs => 
-        prevJobs.map(job => 
-          job.id === jobId 
-            ? { ...job, status: 'cancelled' } 
-            : job
-        )
-      );
+      // After cancellation, remove it from the displayed list
+      setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
 
       toast.success('Order cancelled successfully');
     } catch (error: any) {
@@ -259,7 +265,7 @@ const ActiveOrders = () => {
                       <span className="text-muted-foreground">Stapling:</span> {job.stapling ? 'Yes' : 'No'}
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Price:</span> ${job.price?.toFixed(2)}
+                      <span className="text-muted-foreground">Price:</span> <span className="flex items-center"><LucideIndianRupee size={14} className="mr-0.5" />{job.price?.toFixed(2)}</span>  
                     </div>
                   </div>
                   

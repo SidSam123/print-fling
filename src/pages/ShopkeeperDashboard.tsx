@@ -201,7 +201,7 @@ const ShopkeeperDashboard = () => {
                       <BarChart className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <div className="text-2xl font-bold">${totalSales.toFixed(2)}</div>
+                      <div className="text-2xl font-bold">{totalSales.toFixed(2)} Rs</div>
                       <p className="text-xs text-muted-foreground">Lifetime revenue</p>
                     </div>
                   </div>
