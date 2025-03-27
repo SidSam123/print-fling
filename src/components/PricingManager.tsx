@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Save, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Save, Trash2, AlertCircle, CreditCard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type PricingItem = {
   id?: string;
@@ -30,10 +31,17 @@ const PricingManager: React.FC<PricingManagerProps> = ({ shopId }) => {
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [upiId, setUpiId] = useState('');
+  const [savingUpi, setSavingUpi] = useState(false);
+  const [activeTab, setActiveTab] = useState('pricing');
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
 
   useEffect(() => {
     if (shopId) {
       fetchPricing();
+      fetchShopDetails();
+      fetchPaymentHistory();
     }
   }, [shopId]);
 
@@ -53,6 +61,71 @@ const PricingManager: React.FC<PricingManagerProps> = ({ shopId }) => {
       toast.error('Failed to load pricing information');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchShopDetails = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shops')
+        .select('upi_id')
+        .eq('id', shopId)
+        .single();
+
+      if (error) throw error;
+      
+      if (data && data.upi_id) {
+        setUpiId(data.upi_id);
+      }
+    } catch (error: any) {
+      console.error('Error fetching shop details:', error);
+    }
+  };
+
+  const fetchPaymentHistory = async () => {
+    try {
+      setLoadingPayments(true);
+      const { data, error } = await supabase
+        .from('print_jobs')
+        .select(`
+          id, 
+          price, 
+          created_at, 
+          payment_status,
+          customer_id,
+          profiles(name)
+        `)
+        .eq('shop_id', shopId)
+        .eq('payment_status', 'paid')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      setPaymentHistory(data || []);
+    } catch (error: any) {
+      console.error('Error fetching payment history:', error);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  const saveUpiId = async () => {
+    try {
+      setSavingUpi(true);
+      
+      const { error } = await supabase
+        .from('shops')
+        .update({ upi_id: upiId })
+        .eq('id', shopId);
+        
+      if (error) throw error;
+      
+      toast.success('UPI ID saved successfully');
+    } catch (error: any) {
+      console.error('Error saving UPI ID:', error);
+      toast.error('Failed to save UPI ID');
+    } finally {
+      setSavingUpi(false);
     }
   };
 
@@ -173,7 +246,17 @@ const PricingManager: React.FC<PricingManagerProps> = ({ shopId }) => {
     }
   };
 
-  if (loading) {
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  if (loading && activeTab === 'pricing') {
     return (
       <Card>
         <CardContent className="p-6">
@@ -188,115 +271,192 @@ const PricingManager: React.FC<PricingManagerProps> = ({ shopId }) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Print Pricing</CardTitle>
+        <CardTitle>Shop Management</CardTitle>
         <CardDescription>
-          Set pricing for different types of print jobs
+          Set pricing and payment options for your shop
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {pricingItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-6">
-            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground text-center mb-4">
-              No pricing options configured yet. Add pricing options for your print services.
-            </p>
-            <Button onClick={addNewPricingItem}>
-              <Plus size={16} className="mr-2" />
-              Add Pricing Option
-            </Button>
-          </div>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Paper Size</TableHead>
-                  <TableHead>Color Mode</TableHead>
-                  <TableHead>Price Per Page</TableHead>
-                  <TableHead className="w-[100px]">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pricingItems.map((item, index) => (
-                  <TableRow key={item.id || `new-${index}`}>
-                    <TableCell>
-                      <Select
-                        value={item.paper_size}
-                        onValueChange={(value) => handlePricingChange(index, 'paper_size', value)}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Paper size" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {paperSizes.map((size) => (
-                            <SelectItem key={size} value={size}>
-                              {size}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={item.color_mode}
-                        onValueChange={(value) => handlePricingChange(index, 'color_mode', value)}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Color mode" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="bw">Black & White</SelectItem>
-                          <SelectItem value="color">Color</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <span className="mr-2">$</span>
-                        <Input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={item.price_per_page.toString()}
-                          onChange={(e) => handlePricingChange(index, 'price_per_page', e.target.value)}
-                          className="w-full"
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => removePricingItem(index)}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid grid-cols-2 mb-4">
+            <TabsTrigger value="pricing">Pricing Options</TabsTrigger>
+            <TabsTrigger value="payments">Payment Settings</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="pricing">
+            {pricingItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground text-center mb-4">
+                  No pricing options configured yet. Add pricing options for your print services.
+                </p>
+                <Button onClick={addNewPricingItem}>
+                  <Plus size={16} className="mr-2" />
+                  Add Pricing Option
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Paper Size</TableHead>
+                      <TableHead>Color Mode</TableHead>
+                      <TableHead>Price Per Page</TableHead>
+                      <TableHead className="w-[100px]">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pricingItems.map((item, index) => (
+                      <TableRow key={item.id || `new-${index}`}>
+                        <TableCell>
+                          <Select
+                            value={item.paper_size}
+                            onValueChange={(value) => handlePricingChange(index, 'paper_size', value)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Paper size" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {paperSizes.map((size) => (
+                                <SelectItem key={size} value={size}>
+                                  {size}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={item.color_mode}
+                            onValueChange={(value) => handlePricingChange(index, 'color_mode', value)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Color mode" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="bw">Black & White</SelectItem>
+                              <SelectItem value="color">Color</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center">
+                            <span className="mr-2">₹</span>
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={item.price_per_page.toString()}
+                              onChange={(e) => handlePricingChange(index, 'price_per_page', e.target.value)}
+                              className="w-full"
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => removePricingItem(index)}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
 
-            <div className="flex justify-between mt-4">
-              <Button
-                variant="outline"
-                onClick={addNewPricingItem}
-              >
-                <Plus size={16} className="mr-2" />
-                Add Option
-              </Button>
+                <div className="flex justify-between mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={addNewPricingItem}
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Add Option
+                  </Button>
+                  
+                  <Button 
+                    onClick={savePricing} 
+                    disabled={saving}
+                  >
+                    <Save size={16} className="mr-2" />
+                    {saving ? 'Saving...' : 'Save Pricing'}
+                  </Button>
+                </div>
+              </>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="payments">
+            <div className="space-y-6">
+              <div className="bg-muted/40 rounded-lg p-4 space-y-4">
+                <h3 className="font-medium flex items-center gap-2">
+                  <CreditCard className="h-5 w-5" />
+                  Payment Settings
+                </h3>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="upi-id">UPI ID for Payments</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      id="upi-id" 
+                      placeholder="yourid@upi" 
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                    />
+                    <Button onClick={saveUpiId} disabled={savingUpi}>
+                      {savingUpi ? 'Saving...' : 'Save'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This UPI ID will be shown to customers for payment. Make sure it is correct.
+                  </p>
+                </div>
+              </div>
               
-              <Button 
-                onClick={savePricing} 
-                disabled={saving}
-              >
-                <Save size={16} className="mr-2" />
-                {saving ? 'Saving...' : 'Save Pricing'}
-              </Button>
+              <div className="space-y-4">
+                <h3 className="font-medium">Payment History</h3>
+                
+                {loadingPayments ? (
+                  <div className="flex justify-center py-4">
+                    <div className="rounded-md h-8 w-8 border-4 border-t-primary border-r-transparent border-l-transparent border-b-transparent animate-spin"></div>
+                  </div>
+                ) : paymentHistory.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    No payment records found
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paymentHistory.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell>{formatDate(payment.created_at)}</TableCell>
+                          <TableCell>{payment.profiles?.name || 'Unknown'}</TableCell>
+                          <TableCell>₹{payment.price.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                              {payment.payment_status}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
             </div>
-          </>
-        )}
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

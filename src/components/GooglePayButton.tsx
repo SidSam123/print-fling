@@ -4,19 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Define Google Pay API types properly to avoid TypeScript errors
 declare global {
   interface Window {
-    google?: {
-      payments: {
-        api: {
-          PaymentsClient: new (options: any) => {
-            isReadyToPay: (request: any) => Promise<any>;
-            createButton: (options: any) => HTMLElement;
-            loadPaymentData: (request: any) => Promise<any>;
-          };
-        };
-      };
-    };
+    google?: any; // Use any for the global google object to avoid conflicts
   }
 }
 
@@ -57,7 +48,7 @@ const GooglePayButton = ({ amount, onPaymentSuccess, disabled = false }: GoogleP
       try {
         // Initialize a Google Pay API client
         const client = new window.google.payments.api.PaymentsClient({
-          environment: 'TEST' // Set to 'PRODUCTION' when going live
+          environment: 'TEST' // Using test environment as requested
         });
         
         setPaymentClient(client);
