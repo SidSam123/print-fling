@@ -52,16 +52,9 @@ const ActiveOrders = () => {
   const [viewingDocument, setViewingDocument] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
 
-  const fetchPrintJobs = async (force: boolean = false) => {
+  const fetchPrintJobs = async () => {
     if (!user) return;
-
-    // Only fetch if forced or if it's been more than 5 seconds since last fetch
-    const now = Date.now();
-    if (!force && now - lastFetchTime < 5000) {
-      return;
-    }
 
     try {
       setLoading(true);
@@ -97,7 +90,6 @@ const ActiveOrders = () => {
 
       setPrintJobs(jobsWithShopNames);
       setError(null);
-      setLastFetchTime(now);
     } catch (error: any) {
       console.error('Error fetching print jobs:', error);
       setError('An unexpected error occurred');
@@ -109,29 +101,13 @@ const ActiveOrders = () => {
   useEffect(() => {
     let mounted = true;
     let channel: any;
-    let retryTimeout: NodeJS.Timeout;
-    let retryCount = 0;
-    const MAX_RETRIES = 3;
-
-    const loadJobs = async (force: boolean = false) => {
-      if (!mounted) return;
-      
-      try {
-        await fetchPrintJobs(force);
-      } catch (error) {
-        console.error('Error in loadJobs:', error);
-        if (retryCount < MAX_RETRIES) {
-          retryCount++;
-          retryTimeout = setTimeout(() => loadJobs(true), 1000 * retryCount);
-        }
-      }
-    };
 
     const setupSubscription = () => {
       if (!user?.id) return;
 
+      // Use a more specific channel name with the user ID to avoid conflicts
       channel = supabase
-        .channel('public:print_jobs')
+        .channel(`customer_orders_${user.id}`)
         .on('postgres_changes', 
           { 
             event: '*', 
@@ -139,24 +115,27 @@ const ActiveOrders = () => {
             table: 'print_jobs',
             filter: `customer_id=eq.${user.id}`
           }, 
-          () => {
+          (payload) => {
             if (mounted) {
-              loadJobs(true);
+              console.log('Received realtime update for print_jobs:', payload);
+              fetchPrintJobs();
             }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log(`Subscription status for customer_orders_${user.id}:`, status);
+        });
     };
 
     // Initial load
-    loadJobs(true);
+    fetchPrintJobs();
     setupSubscription();
 
     // Handle visibility change
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && mounted) {
-        retryCount = 0;
-        loadJobs(true); // Force refresh when tab becomes visible
+        console.log('Tab became visible, refreshing orders');
+        fetchPrintJobs();
       }
     };
 
@@ -165,10 +144,8 @@ const ActiveOrders = () => {
     return () => {
       mounted = false;
       if (channel) {
+        console.log('Removing channel subscription');
         supabase.removeChannel(channel);
-      }
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };

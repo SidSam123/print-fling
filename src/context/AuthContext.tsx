@@ -64,62 +64,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Logout function
   const logout = async () => {
     try {
-      // Clear user state first
+      console.log('Logging out...');
+      
+      // Clear user state first for immediate UI feedback
       setUser(null);
       
       // Clear Supabase session
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
       
-      // Clear local storage and session storage
-      localStorage.clear();
-      sessionStorage.clear();
+      if (error) {
+        console.error('Supabase signOut error:', error);
+        throw error;
+      }
       
-      // Clear cookies
-      document.cookie.split(";").forEach((cookie) => {
-        document.cookie = cookie
-          .replace(/^ +/, "")
-          .replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
-      });
+      console.log('Supabase signOut completed');
+      
+      // Force clear all storage mechanisms
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // Clear cookies
+        document.cookie.split(";").forEach((cookie) => {
+          document.cookie = cookie
+            .replace(/^ +/, "")
+            .replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
+        });
+        
+        console.log('Storage cleared');
+      } catch (storageError) {
+        console.error('Error clearing storage:', storageError);
+      }
 
-      // Navigate to auth page
-      window.location.href = '/auth';
+      // Navigate to auth page with a small delay to ensure cleanup is complete
+      setTimeout(() => {
+        window.location.href = '/auth';
+      }, 100);
     } catch (error: any) {
       console.error('Logout failed:', error);
+      
       // Even if there's an error, ensure we clean up
       setUser(null);
       localStorage.clear();
       sessionStorage.clear();
+      
+      // Force redirect to auth page
       window.location.href = '/auth';
     }
   };
-
-  // Handle tab close and navigation events
-  useEffect(() => {
-    let isNavigatingBack = false;
-
-    // Handle navigation (back/forward)
-    const handleNavigation = (event: PopStateEvent) => {
-      if (!isNavigatingBack) {
-        isNavigatingBack = true;
-        // Let the default back navigation happen naturally
-        // without programmatically calling history.go()
-        
-        // Reset the flag after navigation completes
-        setTimeout(() => {
-          isNavigatingBack = false;
-        }, 100);
-      }
-    };
-
-    // Add event listeners
-    window.addEventListener('popstate', handleNavigation);
-
-    // Cleanup listeners on unmount
-    return () => {
-      window.removeEventListener('popstate', handleNavigation);
-    };
-  }, []);
 
   // Initialize auth state
   useEffect(() => {
@@ -129,10 +121,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check for existing session
     const initializeAuth = async () => {
       try {
+        console.log('Initializing auth state...');
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session && mounted) {
+          console.log('Session found:', session.user.id);
           const profile = await fetchUserProfile(session.user.id);
+          
           if (profile && mounted) {
             setUser({
               id: session.user.id,
@@ -140,7 +135,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: profile.name || '',
               role: profile.role as UserRole,
             });
+            console.log('User profile loaded:', profile.name, profile.role);
           }
+        } else {
+          console.log('No active session found');
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -150,8 +148,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           timeoutId = setTimeout(() => {
             if (mounted) {
               setLoading(false);
+              console.log('Auth loading complete');
             }
-          }, 0);
+          }, 100);
         }
       }
     };
@@ -160,10 +159,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change event:', event);
+      
       if (!mounted) return;
 
       if (event === 'SIGNED_IN' && session) {
+        console.log('User signed in:', session.user.id);
         const profile = await fetchUserProfile(session.user.id);
+        
         if (profile && mounted) {
           setUser({
             id: session.user.id,
@@ -171,26 +174,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name: profile.name || '',
             role: profile.role as UserRole,
           });
+          
           timeoutId = setTimeout(() => {
             if (mounted) {
               setLoading(false);
             }
-          }, 0);
+          }, 100);
         }
       } else if (event === 'SIGNED_OUT' && mounted) {
+        console.log('User signed out');
         setUser(null);
+        
         timeoutId = setTimeout(() => {
           if (mounted) {
             setLoading(false);
           }
-        }, 0);
+        }, 100);
       }
     });
 
     // Cleanup subscription, mounted flag, and timeouts on unmount
     return () => {
+      console.log('Cleaning up auth subscriptions');
       mounted = false;
       subscription.unsubscribe();
+      
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
