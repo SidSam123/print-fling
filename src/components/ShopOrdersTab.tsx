@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, FileText, Clock, Printer, AlertTriangle, CheckCircle, 
-  User, X, Eye, DollarSign 
+  User, X, Eye, LucideIndianRupee 
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,22 +15,28 @@ import {
   DialogFooter
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Database } from '@/integrations/supabase/types';
 
-type PrintJob = {
+type Profile = Database['public']['Tables']['profiles']['Row'];
+type PrintJobRow = Database['public']['Tables']['print_jobs']['Row'];
+
+interface DatabasePrintJob extends PrintJobRow {}
+
+interface User {
   id: string;
-  created_at: string;
-  updated_at: string;
-  status: string;
-  customer_id: string;
-  shop_id: string;
-  paper_size: string;
-  color_mode: string;
-  copies: number;
-  double_sided: boolean;
-  stapling: boolean;
-  price: number;
-  file_path: string;
-  customer_name?: string;
+  email: string;
+}
+
+interface PrintJob extends DatabasePrintJob {
+  customer_name: string;
+}
+
+interface PrintJobWithProfile extends DatabasePrintJob {
+  profiles: Profile | null;
+}
+
+type PrintJobResponse = Omit<PrintJob, 'customer_name'> & {
+  profiles: User | null;
 };
 
 const statusStyles = {
@@ -75,6 +81,8 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
 
     try {
       setLoading(true);
+      
+      // First fetch print jobs
       const { data: jobsData, error: jobsError } = await supabase
         .from('print_jobs')
         .select('*')
@@ -94,23 +102,37 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         return;
       }
 
-      const customerIds = [...new Set(jobsData.map(job => job.customer_id))];
-      
-      const { data: customersData, error: customersError } = await supabase
-        .from('profiles')
-        .select('id, name')
-        .in('id', customerIds);
+      let customerProfiles: { id: string; name: string | null; }[] = [];
 
-      if (customersError) {
-        console.error('Error fetching customer profiles:', customersError);
-        setError('Failed to load customer details');
-        return;
+      // Get unique customer IDs
+      const customerIds = [...new Set(jobsData.map(job => job.customer_id))];
+
+      try {
+        // Fetch customer profiles
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', customerIds);
+
+        if (profilesError) {
+          console.error('Error fetching customer profiles:', profilesError);
+        } else {
+          customerProfiles = profiles || [];
+        }
+      } catch (error) {
+        console.error('Error fetching customer profiles:', error);
       }
 
-      const jobsWithCustomerNames = jobsData.map(job => ({
-        ...job,
-        customer_name: customersData?.find(c => c.id === job.customer_id)?.name || 'Unknown Customer',
-      }));
+      // Map jobs with customer names
+      const jobsWithCustomerNames = jobsData.map(job => {
+        const customerProfile = customerProfiles.find(p => p.id === job.customer_id);
+        const customerName = customerProfile?.name || 'Unknown Customer';
+        
+        return {
+          ...job,
+          customer_name: customerName
+        } as PrintJob;
+      });
 
       setPrintJobs(jobsWithCustomerNames);
       setError(null);
@@ -529,8 +551,8 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
                           </div>
                           <div className="flex items-center space-x-2">
                             <div className="flex items-center gap-1 text-sm font-medium">
-                              <DollarSign className="h-4 w-4" />
-                              {job.price?.toFixed(2)}
+                              <LucideIndianRupee className="h-4 w-4" />
+                              Rs. {job.price?.toFixed(2)}
                             </div>
                           </div>
                         </div>

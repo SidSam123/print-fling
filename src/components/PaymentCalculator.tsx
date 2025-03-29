@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PrintSpecs } from '@/components/PrintSpecifications';
@@ -23,6 +23,30 @@ const PaymentCalculator = ({
 }: PaymentCalculatorProps) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  
+  // Load the Razorpay script when component mounts
+  useEffect(() => {
+    const loadRazorpayScript = () => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/payment-button.js';
+      script.async = true;
+      script.dataset.payment_button_id = 'pl_MzMLRg8qBmJFbQ'; // Replace with your actual Razorpay payment button ID
+      
+      // Get the razorpay-payment container element
+      const container = document.getElementById('razorpay-payment-button-container');
+      
+      // Only append if container exists and it doesn't already have the script
+      if (container && !container.querySelector('script')) {
+        container.appendChild(script);
+      }
+    };
+
+    // Only load script if we have a valid order ID
+    if (orderId) {
+      loadRazorpayScript();
+    }
+  }, [orderId]);
   
   const calculateTotalPrice = () => {
     if (!printSpecs.pricePerPage) return 0;
@@ -50,7 +74,7 @@ const PaymentCalculator = ({
     return Math.round((basePrice + staplingFee) * 100) / 100;
   };
 
-  const handlePlaceOrder = async () => {
+  const handleCreateOrder = async () => {
     if (!user || !shopId || !documentPath) {
       toast.error('Missing required information to place order');
       return;
@@ -83,21 +107,33 @@ const PaymentCalculator = ({
         .select('id');
         
       if (error) {
-        console.error('Error placing order:', error);
+        console.error('Error creating order:', error);
         throw new Error(error.message);
       }
       
-      toast.success('Order placed successfully!');
-      onOrderPlaced();
+      if (data && data[0]) {
+        setOrderId(data[0].id);
+        toast.success('Order created! Please complete payment.');
+      }
     } catch (error: any) {
-      console.error('Error placing order:', error);
-      toast.error(error.message || 'Failed to place order');
+      console.error('Error creating order:', error);
+      toast.error(error.message || 'Failed to create order');
     } finally {
       setLoading(false);
     }
   };
   
-  // Calculate if form is complete and ready for order placement
+  const handlePlaceOrder = async () => {
+    if (orderId) {
+      // If we already have an order ID, it means payment is complete
+      onOrderPlaced();
+    } else {
+      // Create the order first, which will then show the payment button
+      await handleCreateOrder();
+    }
+  };
+  
+  // Calculate if form is complete and ready for order creation
   const isFormComplete = user && shopId && documentPath && printSpecs.pricePerPage !== null;
   
   // Calculate total price
@@ -162,6 +198,13 @@ const PaymentCalculator = ({
             <span>Complete all previous steps to place your order</span>
           </div>
         )}
+        
+        {orderId ? (
+          <div className="mt-4">
+            <div className="text-center mb-2 text-sm text-muted-foreground">Please complete your payment</div>
+            <div id="razorpay-payment-button-container" className="flex justify-center"></div>
+          </div>
+        ) : null}
       </CardContent>
       <CardFooter>
         <Button 
@@ -170,7 +213,7 @@ const PaymentCalculator = ({
           onClick={handlePlaceOrder}
         >
           {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
-          {loading ? 'Processing...' : 'Place Order'}
+          {loading ? 'Processing...' : orderId ? 'Complete Payment' : 'Place Order'}
         </Button>
       </CardFooter>
     </Card>

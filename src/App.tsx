@@ -13,17 +13,18 @@ import AdminDashboard from "./pages/AdminDashboard";
 import PrintOrder from "./pages/PrintOrder";
 import NotFound from "./pages/NotFound";
 
+// Create a new QueryClient instance inside the component
+const queryClient = new QueryClient();
+
 const App = () => {
-  // Create a new QueryClient instance inside the component
-  const queryClient = new QueryClient();
   
   return (
+    <BrowserRouter>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
@@ -34,10 +35,10 @@ const App = () => {
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
+    </BrowserRouter>
   );
 };
 

@@ -3,6 +3,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+const supaCallTimeout = 0
+
 // Define user roles
 export type UserRole = 'customer' | 'shopkeeper' | 'admin';
 
@@ -160,31 +162,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-
-      if (event === 'SIGNED_IN' && session) {
-        const profile = await fetchUserProfile(session.user.id);
-        if (profile && mounted) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email!,
-            name: profile.name || '',
-            role: profile.role as UserRole,
-          });
+      setTimeout(async() => {
+        
+        if (!mounted) return;
+        
+        if (event === 'SIGNED_IN' && session) {
+          const profile = await fetchUserProfile(session.user.id);
+          if (profile && mounted) {
+            setUser({
+              id: session.user.id,
+              email: session.user.email!,
+              name: profile.name || '',
+              role: profile.role as UserRole,
+            });
+            timeoutId = setTimeout(() => {
+              if (mounted) {
+                setLoading(false);
+              }
+            }, 0);
+          }
+        } else if (event === 'SIGNED_OUT' && mounted) {
+          setUser(null);
           timeoutId = setTimeout(() => {
             if (mounted) {
               setLoading(false);
             }
           }, 0);
         }
-      } else if (event === 'SIGNED_OUT' && mounted) {
-        setUser(null);
-        timeoutId = setTimeout(() => {
-          if (mounted) {
-            setLoading(false);
-          }
-        }, 0);
-      }
+        
+      }, supaCallTimeout);
     });
 
     // Cleanup subscription, mounted flag, and timeouts on unmount

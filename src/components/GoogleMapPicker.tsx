@@ -60,7 +60,6 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
 
     // const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     const apiKey = "AIzaSyAt-mYqJvqHDLKdlN3cZ_3HDN5IJ8J-D4U";
-    
     if (!apiKey) {
       console.error('Google Maps API key is missing');
       toast.error('Map configuration error. Please contact support.');
