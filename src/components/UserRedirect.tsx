@@ -1,7 +1,7 @@
-
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, UserRole } from '@/context/AuthContext';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type UserRedirectProps = {
   children: React.ReactNode;
@@ -17,9 +17,14 @@ const UserRedirect: React.FC<UserRedirectProps> = ({
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   // Memoize the redirect function to avoid recreating it on every render
   const redirectBasedOnRole = useCallback((role: UserRole) => {
+    // Don't redirect if already redirecting
+    if (isRedirecting) return;
+    
     console.log(`Redirecting based on role: ${role}`);
     
     // Check if we're already on the appropriate dashboard
@@ -31,9 +36,11 @@ const UserRedirect: React.FC<UserRedirectProps> = ({
       return; // Already on the correct page
     }
     
-    // Use window.location for a full page refresh to ensure clean state
-    window.location.href = targetPath;
-  }, [location.pathname]);
+    setIsRedirecting(true);
+    
+    // Navigate instead of window.location for smoother transitions
+    navigate(targetPath, { replace: true });
+  }, [location.pathname, navigate, isRedirecting]);
 
   // Handle auth state and redirects
   useEffect(() => {
@@ -41,8 +48,6 @@ const UserRedirect: React.FC<UserRedirectProps> = ({
 
     const handleRedirects = () => {
       if (loading) return;
-
-      if (!mounted) return;
       
       console.log(`UserRedirect: handling redirects. User:`, user?.id ? `User ${user.id}` : 'No user', 
                   `Required role: ${requiredRole || 'none'}, Current path: ${location.pathname}`);
@@ -58,7 +63,8 @@ const UserRedirect: React.FC<UserRedirectProps> = ({
       // If a role is required and no user is logged in, redirect to auth
       if (requiredRole !== null && !user) {
         console.log(`Role required but no user logged in, redirecting to: ${redirectTo}`);
-        window.location.href = redirectTo; // Use window.location for clean refresh
+        setIsRedirecting(true);
+        navigate(redirectTo, { replace: true });
         return;
       }
       
@@ -67,30 +73,51 @@ const UserRedirect: React.FC<UserRedirectProps> = ({
         console.log(`User has incorrect role (${user.role}, needs ${requiredRole}), redirecting`);
         redirectBasedOnRole(user.role);
       }
+      
+      // If we got here, auth check is complete
+      if (mounted) {
+        setAuthChecked(true);
+      }
     };
 
-    // Small timeout to ensure auth state is fully initialized
-    const timeoutId = setTimeout(() => {
-      if (mounted) {
-        handleRedirects();
-      }
-    }, 50);
+    // Run immediately if auth is already loaded
+    if (!loading) {
+      handleRedirects();
+    } else {
+      // Set a short timeout to avoid flashing loading state for quick auth responses
+      const timeoutId = setTimeout(() => {
+        if (mounted && !authChecked) {
+          handleRedirects();
+        }
+      }, 100);
+      
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
 
     return () => {
       mounted = false;
-      clearTimeout(timeoutId);
     };
-  }, [user, loading, requiredRole, redirectTo, redirectBasedOnRole, location.pathname]);
+  }, [user, loading, requiredRole, redirectTo, redirectBasedOnRole, location.pathname, navigate, authChecked]);
 
-  // Show loading or render children
-  if (loading) {
+  // Show optimized loading UI or render children
+  if (loading && !authChecked && !isRedirecting) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="rounded-md h-12 w-12 border-4 border-t-primary border-r-transparent border-l-transparent border-b-transparent animate-spin"></div>
+      <div className="min-h-screen flex flex-col">
+        {/* Keep navbar space */}
+        <div className="h-16 w-full">
+          <Skeleton className="h-16 w-full" />
+        </div>
+        
+        <div className="flex-1 flex items-center justify-center">
+          <div className="rounded-md h-12 w-12 border-4 border-t-primary border-r-transparent border-l-transparent border-b-transparent animate-spin"></div>
+        </div>
       </div>
     );
   }
 
+  // Show children once auth is verified or if authChecked is true
   return <>{children}</>;
 };
 
