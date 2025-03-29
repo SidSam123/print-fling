@@ -58,8 +58,9 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
     // Create script tag to load Google Maps
     const googleMapScript = document.createElement('script');
 
-    const apiKey = "AIzaSyAt-mYqJvqHDLKdlN3cZ_3HDN5IJ8J-D4U";
     // const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    const apiKey = "AIzaSyAt-mYqJvqHDLKdlN3cZ_3HDN5IJ8J-D4U";
+    
     if (!apiKey) {
       console.error('Google Maps API key is missing');
       toast.error('Map configuration error. Please contact support.');
@@ -97,6 +98,15 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
           
           // Get address for initial location
           getAddressFromLocation(selectedLocation);
+          
+          // Add click handler to remove marker
+          newMarker.addListener('click', function() {
+            newMarker.setMap(null);
+            setMarker(null);
+            setSelectedLocation(null);
+            setSelectedAddress('');
+            onSelectLocation({ lat: 0, lng: 0 }, '');
+          });
           
           // Update location when marker is dragged
           newMarker.addListener('dragend', function() {
@@ -136,6 +146,15 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
           
           // Get address for clicked location
           getAddressFromLocation(newLocation);
+          
+          // Add click handler to remove marker
+          newMarker.addListener('click', function() {
+            newMarker.setMap(null);
+            setMarker(null);
+            setSelectedLocation(null);
+            setSelectedAddress('');
+            onSelectLocation({ lat: 0, lng: 0 }, '');
+          });
           
           // Update location when marker is dragged
           newMarker.addListener('dragend', function() {
@@ -196,6 +215,15 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
         setSelectedAddress(address);
         onSelectLocation(newLocation, address);
         
+        // Add click handler to remove marker
+        newMarker.addListener('click', function() {
+          newMarker.setMap(null);
+          setMarker(null);
+          setSelectedLocation(null);
+          setSelectedAddress('');
+          onSelectLocation({ lat: 0, lng: 0 }, '');
+        });
+        
         // Update location when marker is dragged
         newMarker.addListener('dragend', function() {
           const position = newMarker.getPosition();
@@ -240,6 +268,15 @@ const GoogleMapPicker: React.FC<GoogleMapPickerProps> = ({ initialLocation, onSe
           
           // Get address for current location
           getAddressFromLocation(newLocation);
+          
+          // Add click handler to remove marker
+          newMarker.addListener('click', function() {
+            newMarker.setMap(null);
+            setMarker(null);
+            setSelectedLocation(null);
+            setSelectedAddress('');
+            onSelectLocation({ lat: 0, lng: 0 }, '');
+          });
           
           // Update location when marker is dragged
           newMarker.addListener('dragend', function() {

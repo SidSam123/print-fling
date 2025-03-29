@@ -6,11 +6,11 @@ import type { Database } from './types';
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-//Sid Supa
+// Sid Supa
 const SUPABASE_URL = "https://mflaeihhyptgauqxiwfa.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbGFlaWhoeXB0Z2F1cXhpd2ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIxMzU1NjEsImV4cCI6MjA1NzcxMTU2MX0.-WVAMPglPEH-jVagOBn4RJpNSYvnYLLW8W9UNyD5ivs";
 
-//Arnav supa
+// //Arnav supa
 // const SUPABASE_URL = "https://cbpndigqwfykiqjssfhi.supabase.co";
 // const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNicG5kaWdxd2Z5a2lxanNzZmhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA0OTI0MDUsImV4cCI6MjA1NjA2ODQwNX0.9AqEg5WklJv2gJQOp1rOsQZ09eLdZ3DlN3HIpS9HqdA";
 

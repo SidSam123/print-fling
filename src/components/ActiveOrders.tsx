@@ -48,12 +48,20 @@ const statusStyles = {
 const ActiveOrders = () => {
   const { user } = useAuth();
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [viewingDocument, setViewingDocument] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
 
-  const fetchPrintJobs = async () => {
+  const fetchPrintJobs = async (force: boolean = false) => {
     if (!user) return;
+
+    // Only fetch if forced or if it's been more than 5 seconds since last fetch
+    const now = Date.now();
+    if (!force && now - lastFetchTime < 5000) {
+      return;
+    }
 
     try {
       setLoading(true);
@@ -66,8 +74,7 @@ const ActiveOrders = () => {
 
       if (jobsError) {
         console.error('Error fetching jobs:', jobsError);
-        toast.error('Failed to load your orders. Please refresh the page.');
-        setLoading(false);
+        setError('Failed to load your orders');
         return;
       }
 
@@ -79,8 +86,7 @@ const ActiveOrders = () => {
 
       if (shopsError) {
         console.error('Error fetching shops:', shopsError);
-        toast.error('Failed to load shop details. Please refresh the page.');
-        setLoading(false);
+        setError('Failed to load shop details');
         return;
       }
 
@@ -90,9 +96,11 @@ const ActiveOrders = () => {
       }));
 
       setPrintJobs(jobsWithShopNames);
+      setError(null);
+      setLastFetchTime(now);
     } catch (error: any) {
       console.error('Error fetching print jobs:', error);
-      toast.error('An unexpected error occurred. Please try again.');
+      setError('An unexpected error occurred');
     } finally {
       setLoading(false);
     }
@@ -100,31 +108,69 @@ const ActiveOrders = () => {
 
   useEffect(() => {
     let mounted = true;
+    let channel: any;
+    let retryTimeout: NodeJS.Timeout;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
 
-    const loadJobs = async () => {
-      await fetchPrintJobs();
+    const loadJobs = async (force: boolean = false) => {
+      if (!mounted) return;
+      
+      try {
+        await fetchPrintJobs(force);
+      } catch (error) {
+        console.error('Error in loadJobs:', error);
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          retryTimeout = setTimeout(() => loadJobs(true), 1000 * retryCount);
+        }
+      }
     };
 
-    loadJobs();
+    const setupSubscription = () => {
+      if (!user?.id) return;
 
-    const channel = supabase
-      .channel('public:print_jobs')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'print_jobs',
-          filter: `customer_id=eq.${user?.id}`
-        }, 
-        () => {
-          fetchPrintJobs();
-        }
-      )
-      .subscribe();
+      channel = supabase
+        .channel('public:print_jobs')
+        .on('postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'print_jobs',
+            filter: `customer_id=eq.${user.id}`
+          }, 
+          () => {
+            if (mounted) {
+              loadJobs(true);
+            }
+          }
+        )
+        .subscribe();
+    };
+
+    // Initial load
+    loadJobs(true);
+    setupSubscription();
+
+    // Handle visibility change
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && mounted) {
+        retryCount = 0;
+        loadJobs(true); // Force refresh when tab becomes visible
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       mounted = false;
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [user]);
 
@@ -178,6 +224,38 @@ const ActiveOrders = () => {
             <div className="h-6 w-6 border-2 border-t-primary border-r-transparent border-l-transparent border-b-transparent animate-spin"></div>
           </div>
           <p className="text-sm text-muted-foreground">Loading your orders...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="bg-card shadow-sm">
+        <CardHeader>
+          <CardTitle>My Active Orders</CardTitle>
+          <CardDescription>
+            Track and manage your current print jobs
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center py-8">
+          <div className="p-5 bg-red-100 rounded-full mb-5">
+            <AlertTriangle size={48} className="text-red-500" />
+          </div>
+          <h3 className="text-lg font-medium text-red-500">Error Loading Orders</h3>
+          <p className="text-sm text-muted-foreground max-w-md mt-2 text-center">
+            {error}. Please try refreshing the page.
+          </p>
+          <Button 
+            className="mt-6" 
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              fetchPrintJobs().finally(() => setLoading(false));
+            }}
+          >
+            Retry
+          </Button>
         </CardContent>
       </Card>
     );
