@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CalendarDays, FileText, Clock, Printer, AlertTriangle, CheckCircle, Eye, LucideIndianRupee } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -52,12 +52,26 @@ const ActiveOrders = () => {
   const [viewingDocument, setViewingDocument] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const channelRef = useRef<any>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const lastFetchTimeRef = useRef<number>(0);
 
-  const fetchPrintJobs = async () => {
-    if (!user) return;
+  const fetchPrintJobs = async (forceFetch = false) => {
+    if (!user || !isMountedRef.current) return;
 
+    // Throttle fetches to prevent unnecessary calls
+    const now = Date.now();
+    if (!forceFetch && now - lastFetchTimeRef.current < 3000) {
+      return; // Skip fetching if it's been less than 3 seconds since last fetch
+    }
+    
+    lastFetchTimeRef.current = now;
+    
     try {
       setLoading(true);
+      
+      console.log('Fetching print jobs for user:', user.id);
+      
       const { data: jobsData, error: jobsError } = await supabase
         .from('print_jobs')
         .select('*')
@@ -71,7 +85,15 @@ const ActiveOrders = () => {
         return;
       }
 
+      if (!jobsData || jobsData.length === 0) {
+        console.log('No active print jobs found');
+        setPrintJobs([]);
+        setError(null);
+        return;
+      }
+
       const shopIds = [...new Set(jobsData.map(job => job.shop_id))];
+      
       const { data: shopsData, error: shopsError } = await supabase
         .from('shops')
         .select('id, name')
@@ -88,80 +110,117 @@ const ActiveOrders = () => {
         shop_name: shopsData?.find(s => s.id === job.shop_id)?.name || 'Unknown Shop',
       }));
 
-      setPrintJobs(jobsWithShopNames);
-      setError(null);
+      console.log('Loaded print jobs:', jobsWithShopNames.length);
+      
+      if (isMountedRef.current) {
+        setPrintJobs(jobsWithShopNames);
+        setError(null);
+      }
     } catch (error: any) {
       console.error('Error fetching print jobs:', error);
-      setError('An unexpected error occurred');
+      if (isMountedRef.current) {
+        setError('An unexpected error occurred');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
-  useEffect(() => {
-    let mounted = true;
-    let channel: any;
+  const setupRealtimeSubscription = () => {
+    if (!user?.id || !isMountedRef.current) return;
 
-    const setupSubscription = () => {
-      if (!user?.id) return;
+    // Clean up any existing channel first
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
 
-      // Use a more specific channel name with the user ID to avoid conflicts
-      channel = supabase
-        .channel(`customer_orders_${user.id}`)
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'print_jobs',
-            filter: `customer_id=eq.${user.id}`
-          }, 
-          (payload) => {
-            if (mounted) {
-              console.log('Received realtime update for print_jobs:', payload);
-              fetchPrintJobs();
-            }
+    // Create a unique channel name with the user ID and a timestamp to avoid conflicts
+    const channelName = `customer_orders_${user.id}_${Date.now()}`;
+    
+    console.log(`Setting up realtime subscription for ${channelName}`);
+    
+    channelRef.current = supabase
+      .channel(channelName)
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'print_jobs',
+          filter: `customer_id=eq.${user.id}`
+        }, 
+        (payload) => {
+          console.log('Received realtime update for print_jobs:', payload);
+          if (isMountedRef.current) {
+            fetchPrintJobs(true);
           }
-        )
-        .subscribe((status) => {
-          console.log(`Subscription status for customer_orders_${user.id}:`, status);
-        });
-    };
+        }
+      )
+      .subscribe((status) => {
+        console.log(`Subscription status for ${channelName}:`, status);
+      });
+  };
 
-    // Initial load
-    fetchPrintJobs();
-    setupSubscription();
-
-    // Handle visibility change
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    // Initial data fetch
+    fetchPrintJobs(true);
+    
+    // Set up realtime subscription
+    setupRealtimeSubscription();
+    
+    // Function to handle visibility change
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && mounted) {
-        console.log('Tab became visible, refreshing orders');
+      console.log('Document visibility state changed:', document.visibilityState);
+      
+      if (document.visibilityState === 'visible') {
+        console.log('Tab became visible, refreshing orders and reestablishing realtime connection');
+        fetchPrintJobs(true);
+        setupRealtimeSubscription();
+      }
+    };
+    
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Set up periodic refresh when the tab is visible
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible' && isMountedRef.current) {
+        console.log('Periodic refresh while tab is visible');
         fetchPrintJobs();
       }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
+    }, 30000); // Refresh every 30 seconds if tab is visible
+    
+    // Cleanup function
     return () => {
-      mounted = false;
-      if (channel) {
+      console.log('Unmounting ActiveOrders component, cleaning up resources');
+      isMountedRef.current = false;
+      
+      if (channelRef.current) {
         console.log('Removing channel subscription');
-        supabase.removeChannel(channel);
+        supabase.removeChannel(channelRef.current);
       }
+      
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalId);
     };
-  }, [user]);
+  }, [user?.id]);
 
   const cancelOrder = async (jobId: string) => {
+    if (!user) return;
+    
     try {
       const { error } = await supabase
         .from('print_jobs')
         .update({ status: 'cancelled' })
         .eq('id', jobId)
-        .eq('customer_id', user?.id);
+        .eq('customer_id', user.id);
 
       if (error) throw error;
 
-      // After cancellation, remove it from the displayed list
+      // After cancellation, update the local state to reflect the change
       setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
 
       toast.success('Order cancelled successfully');
@@ -228,7 +287,7 @@ const ActiveOrders = () => {
             onClick={() => {
               setError(null);
               setLoading(true);
-              fetchPrintJobs().finally(() => setLoading(false));
+              fetchPrintJobs(true);
             }}
           >
             Retry

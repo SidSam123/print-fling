@@ -64,51 +64,93 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Logout function
   const logout = async () => {
     try {
-      console.log('Logging out...');
+      // Create a unique identifier for this logout process for debugging
+      const logoutId = `logout-${Date.now()}`;
+      console.log(`[${logoutId}] Starting logout process...`);
+      
+      // Clear Supabase-specific cookies right away - this is critical
+      document.cookie.split(";").forEach((cookie) => {
+        const parts = cookie.split("=");
+        const name = parts[0].trim();
+        if (name.startsWith("sb-")) {
+          document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          console.log(`[${logoutId}] Cleared Supabase cookie: ${name}`);
+        }
+      });
       
       // Clear user state first for immediate UI feedback
+      console.log(`[${logoutId}] Clearing user state...`);
       setUser(null);
-      
-      // Clear Supabase session
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        console.error('Supabase signOut error:', error);
-        throw error;
+
+      // Suppress errors from Supabase signOut - we're going to force clean up anyway
+      try {
+        console.log(`[${logoutId}] Calling supabase.auth.signOut()...`);
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.error(`[${logoutId}] Supabase signOut error:`, error);
+          // Continue with logout process even if Supabase signOut fails
+        } else {
+          console.log(`[${logoutId}] Supabase signOut completed successfully`);
+        }
+      } catch (signOutError) {
+        console.error(`[${logoutId}] Exception during supabase.auth.signOut():`, signOutError);
+        // Continue with logout process even if Supabase signOut throws
       }
       
-      console.log('Supabase signOut completed');
-      
-      // Force clear all storage mechanisms
+      // Forcefully clear all storage mechanisms
       try {
-        localStorage.clear();
-        sessionStorage.clear();
+        // Local storage cleanup
+        console.log(`[${logoutId}] Clearing localStorage...`);
+        localStorage.removeItem('sb-refresh-token');
+        localStorage.removeItem('sb-access-token');
+        localStorage.removeItem('supabase.auth.token');
+        // These are the keys we know about, but clear everything to be safe
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('sb-') || key.includes('supabase')) {
+            localStorage.removeItem(key);
+            console.log(`[${logoutId}] Removed localStorage key: ${key}`);
+          }
+        }
         
-        // Clear cookies
-        document.cookie.split(";").forEach((cookie) => {
-          document.cookie = cookie
-            .replace(/^ +/, "")
-            .replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
-        });
+        // Add an extra clean sweep attempt for ALL storage
+        console.log(`[${logoutId}] Final storage cleanup sweep...`);
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+        } catch (storageError) {
+          console.error(`[${logoutId}] Error during final storage cleanup:`, storageError);
+        }
         
-        console.log('Storage cleared');
+        console.log(`[${logoutId}] Storage cleared successfully`);
       } catch (storageError) {
-        console.error('Error clearing storage:', storageError);
+        console.error(`[${logoutId}] Error clearing storage:`, storageError);
       }
 
-      // Navigate to auth page with a small delay to ensure cleanup is complete
+      console.log(`[${logoutId}] Logout process completed, redirecting to auth page...`);
+      
+      // Navigate to auth page - use a timeout to ensure all cleanup operations complete
+      // and a clean redirect happens even if something fails along the way
+      window.location.href = '/auth';
+      
+      // Don't rely on the timeout, force the redirect immediately
       setTimeout(() => {
+        console.log(`[${logoutId}] Backup timeout redirect triggered`);
         window.location.href = '/auth';
-      }, 100);
+      }, 500);
     } catch (error: any) {
       console.error('Logout failed:', error);
       
-      // Even if there's an error, ensure we clean up
-      setUser(null);
-      localStorage.clear();
-      sessionStorage.clear();
+      // Final failsafe - force redirect to auth page regardless of errors
+      try {
+        // Clear sensitive data even if we had an error
+        setUser(null);
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch (e) {
+        console.error('Final error cleanup failed:', e);
+      }
       
-      // Force redirect to auth page
+      // Force redirect to auth page as a last resort
       window.location.href = '/auth';
     }
   };
