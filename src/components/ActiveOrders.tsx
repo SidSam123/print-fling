@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CalendarDays, FileText, Clock, Printer, AlertTriangle, CheckCircle, Eye, LucideIndianRupee } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,8 +10,6 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
 
 type PrintJob = {
   id: string;
@@ -50,32 +48,23 @@ const statusStyles = {
 const ActiveOrders = () => {
   const { user } = useAuth();
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [viewingDocument, setViewingDocument] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const isMountedRef = useRef<boolean>(true);
-  const channelRef = useRef<any>(null);
-  const lastFetchTimeRef = useRef<number>(0);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
 
-  // Function to fetch print jobs with retry and throttling logic
-  const fetchPrintJobs = async (force = false) => {
-    if (!user?.id || !isMountedRef.current) return;
+  const fetchPrintJobs = async (force: boolean = false) => {
+    if (!user) return;
 
-    // Throttle fetches to prevent too many requests
+    // Only fetch if forced or if it's been more than 5 seconds since last fetch
     const now = Date.now();
-    if (!force && now - lastFetchTimeRef.current < 3000) {
-      console.log('Throttling fetchPrintJobs request');
+    if (!force && now - lastFetchTime < 5000) {
       return;
     }
-    
-    lastFetchTimeRef.current = now;
-    
+
     try {
-      console.log(`Fetching print jobs for user: ${user.id}`);
-      
+      setLoading(true);
       const { data: jobsData, error: jobsError } = await supabase
         .from('print_jobs')
         .select('*')
@@ -85,25 +74,11 @@ const ActiveOrders = () => {
 
       if (jobsError) {
         console.error('Error fetching jobs:', jobsError);
-        if (isMountedRef.current) {
-          setError('Failed to load your orders');
-          setRetryCount(prev => prev + 1);
-        }
-        return;
-      }
-
-      if (!jobsData || jobsData.length === 0) {
-        console.log('No active print jobs found');
-        if (isMountedRef.current) {
-          setPrintJobs([]);
-          setError(null);
-          setLoading(false);
-        }
+        setError('Failed to load your orders');
         return;
       }
 
       const shopIds = [...new Set(jobsData.map(job => job.shop_id))];
-      
       const { data: shopsData, error: shopsError } = await supabase
         .from('shops')
         .select('id, name')
@@ -111,10 +86,7 @@ const ActiveOrders = () => {
 
       if (shopsError) {
         console.error('Error fetching shops:', shopsError);
-        if (isMountedRef.current) {
-          setError('Failed to load shop details');
-          setRetryCount(prev => prev + 1);
-        }
+        setError('Failed to load shop details');
         return;
       }
 
@@ -123,45 +95,43 @@ const ActiveOrders = () => {
         shop_name: shopsData?.find(s => s.id === job.shop_id)?.name || 'Unknown Shop',
       }));
 
-      console.log(`Successfully loaded ${jobsWithShopNames.length} print jobs`);
-      
-      if (isMountedRef.current) {
-        setPrintJobs(jobsWithShopNames);
-        setError(null);
-        setLoading(false);
-        // Reset retry count on success
-        setRetryCount(0);
-      }
+      setPrintJobs(jobsWithShopNames);
+      setError(null);
+      setLastFetchTime(now);
     } catch (error: any) {
-      console.error('Error in fetchPrintJobs:', error);
-      if (isMountedRef.current) {
-        setError('An unexpected error occurred');
-        setRetryCount(prev => prev + 1);
-      }
+      console.error('Error fetching print jobs:', error);
+      setError('An unexpected error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Set up realtime subscription to listen for changes
-  const setupRealtimeSubscription = () => {
-    if (!user?.id || !isMountedRef.current) {
-      console.log('Cannot setup realtime: missing user ID or component unmounted');
-      return;
-    }
+  useEffect(() => {
+    let mounted = true;
+    let channel: any;
+    let retryTimeout: NodeJS.Timeout;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
 
-    // Clean up existing channel if any
-    if (channelRef.current) {
-      console.log('Removing existing channel subscription');
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
+    const loadJobs = async (force: boolean = false) => {
+      if (!mounted) return;
+      
+      try {
+        await fetchPrintJobs(force);
+      } catch (error) {
+        console.error('Error in loadJobs:', error);
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          retryTimeout = setTimeout(() => loadJobs(true), 1000 * retryCount);
+        }
+      }
+    };
 
-    // Create a unique channel name
-    const channelName = `active_orders_${user.id}_${Date.now()}`;
-    console.log(`Setting up new realtime channel: ${channelName}`);
+    const setupSubscription = () => {
+      if (!user?.id) return;
 
-    try {
-      channelRef.current = supabase
-        .channel(channelName)
+      channel = supabase
+        .channel('public:print_jobs')
         .on('postgres_changes', 
           { 
             event: '*', 
@@ -169,139 +139,54 @@ const ActiveOrders = () => {
             table: 'print_jobs',
             filter: `customer_id=eq.${user.id}`
           }, 
-          (payload) => {
-            console.log('Received realtime update:', payload);
-            if (isMountedRef.current) {
-              fetchPrintJobs(true);
+          () => {
+            if (mounted) {
+              loadJobs(true);
             }
           }
         )
-        .subscribe((status) => {
-          console.log(`Realtime subscription status for ${channelName}:`, status);
-          
-          // If subscription fails, fall back to polling
-          if (status !== 'SUBSCRIBED' && isMountedRef.current) {
-            console.log('Realtime subscription failed, falling back to polling');
-            startPolling();
-          }
-        });
-    } catch (error) {
-      console.error('Error setting up realtime subscription:', error);
-      // Fall back to polling if realtime setup fails
-      if (isMountedRef.current) {
-        startPolling();
-      }
-    }
-  };
-
-  // Start polling as a fallback mechanism
-  const startPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-    }
-    
-    console.log('Starting polling for updates every 10 seconds');
-    pollingIntervalRef.current = setInterval(() => {
-      if (document.visibilityState === 'visible' && isMountedRef.current) {
-        console.log('Polling: fetching print jobs');
-        fetchPrintJobs();
-      }
-    }, 10000);
-  };
-
-  // Effect to initialize data and subscriptions
-  useEffect(() => {
-    console.log('ActiveOrders component mounted');
-    isMountedRef.current = true;
-    
-    const initializeComponent = async () => {
-      if (!user?.id) {
-        console.log('No user ID available, waiting...');
-        return;
-      }
-      
-      // Initial data fetch
-      await fetchPrintJobs(true);
-      
-      // Set up realtime subscription
-      setupRealtimeSubscription();
+        .subscribe();
     };
-    
-    initializeComponent();
-    
-    // Handle visibility changes (tab switching)
+
+    // Initial load
+    loadJobs(true);
+    setupSubscription();
+
+    // Handle visibility change
     const handleVisibilityChange = () => {
-      console.log('Document visibility changed:', document.visibilityState);
-      
-      if (document.visibilityState === 'visible' && isMountedRef.current) {
-        console.log('Tab is now visible, refreshing data');
-        fetchPrintJobs(true);
-        
-        // Re-establish realtime connection when tab becomes visible
-        setupRealtimeSubscription();
+      if (document.visibilityState === 'visible' && mounted) {
+        retryCount = 0;
+        loadJobs(true); // Force refresh when tab becomes visible
       }
     };
-    
-    // Add event listener for visibility changes
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Cleanup function
-    return () => {
-      console.log('ActiveOrders component unmounting');
-      isMountedRef.current = false;
-      
-      // Remove realtime subscription
-      if (channelRef.current) {
-        console.log('Cleaning up channel subscription');
-        supabase.removeChannel(channelRef.current);
-      }
-      
-      // Clear polling interval
-      if (pollingIntervalRef.current) {
-        console.log('Clearing polling interval');
-        clearInterval(pollingIntervalRef.current);
-      }
-      
-      // Remove event listener
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [user?.id]);
 
-  // Auto-retry logic for errors
-  useEffect(() => {
-    let retryTimeout: NodeJS.Timeout | null = null;
-    
-    if (error && retryCount < 3 && isMountedRef.current) {
-      console.log(`Auto-retrying fetch (attempt ${retryCount + 1} of 3)`);
-      const delay = Math.min(2000 * (retryCount + 1), 10000); // Exponential backoff
-      
-      retryTimeout = setTimeout(() => {
-        if (isMountedRef.current) {
-          fetchPrintJobs(true);
-        }
-      }, delay);
-    }
-    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+      mounted = false;
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
       if (retryTimeout) {
         clearTimeout(retryTimeout);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [error, retryCount]);
+  }, [user]);
 
   const cancelOrder = async (jobId: string) => {
-    if (!user) return;
-    
     try {
       const { error } = await supabase
         .from('print_jobs')
         .update({ status: 'cancelled' })
         .eq('id', jobId)
-        .eq('customer_id', user.id);
+        .eq('customer_id', user?.id);
 
       if (error) throw error;
 
-      // We'll rely on the realtime update to refresh the UI
+      // After cancellation, remove it from the displayed list
+      setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
+
       toast.success('Order cancelled successfully');
     } catch (error: any) {
       console.error('Error cancelling order:', error);
@@ -325,7 +210,6 @@ const ActiveOrders = () => {
     }
   };
 
-  // Loading state
   if (loading) {
     return (
       <Card className="bg-card shadow-sm">
@@ -335,38 +219,16 @@ const ActiveOrders = () => {
             Track and manage your current print jobs
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="p-4 border rounded-lg">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex gap-3 items-center">
-                    <Skeleton className="h-10 w-10 rounded-full" />
-                    <div>
-                      <Skeleton className="h-5 w-32 mb-2" />
-                      <Skeleton className="h-4 w-24" />
-                    </div>
-                  </div>
-                  <Skeleton className="h-6 w-20" />
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2 mb-4">
-                  {[1, 2, 3, 4, 5, 6].map((j) => (
-                    <Skeleton key={j} className="h-4 w-24" />
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Skeleton className="h-9 w-32" />
-                  <Skeleton className="h-9 w-32" />
-                </div>
-              </div>
-            ))}
+        <CardContent className="flex flex-col items-center py-8">
+          <div className="p-4 bg-primary/10 rounded-full mb-4">
+            <div className="h-6 w-6 border-2 border-t-primary border-r-transparent border-l-transparent border-b-transparent animate-spin"></div>
           </div>
+          <p className="text-sm text-muted-foreground">Loading your orders...</p>
         </CardContent>
       </Card>
     );
   }
 
-  // Error state
   if (error) {
     return (
       <Card className="bg-card shadow-sm">
@@ -389,7 +251,7 @@ const ActiveOrders = () => {
             onClick={() => {
               setError(null);
               setLoading(true);
-              fetchPrintJobs(true);
+              fetchPrintJobs().finally(() => setLoading(false));
             }}
           >
             Retry
@@ -399,7 +261,6 @@ const ActiveOrders = () => {
     );
   }
 
-  // Empty state
   if (printJobs.length === 0) {
     return (
       <Card className="bg-card shadow-sm">
@@ -425,7 +286,6 @@ const ActiveOrders = () => {
     );
   }
 
-  // Success state with data
   return (
     <>
       <Card className="bg-card shadow-sm">

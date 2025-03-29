@@ -4,10 +4,13 @@ import { Link } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import AuthForm from '@/components/AuthForm';
 import UserRedirect from '@/components/UserRedirect';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 
 const Auth = () => {
+  const { user } = useAuth();
+  
   return (
     <UserRedirect requiredRole={null}>
       <div className="min-h-screen dashboard-gradient">

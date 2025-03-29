@@ -64,96 +64,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Logout function
   const logout = async () => {
     try {
-      // Create a unique identifier for this logout process for debugging
-      const logoutId = `logout-${Date.now()}`;
-      console.log(`[${logoutId}] Starting logout process...`);
-      
-      // Clear Supabase-specific cookies right away - this is critical
-      document.cookie.split(";").forEach((cookie) => {
-        const parts = cookie.split("=");
-        const name = parts[0].trim();
-        if (name.startsWith("sb-")) {
-          document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-          console.log(`[${logoutId}] Cleared Supabase cookie: ${name}`);
-        }
-      });
-      
-      // Clear user state first for immediate UI feedback
-      console.log(`[${logoutId}] Clearing user state...`);
+      // Clear user state first
       setUser(null);
-
-      // Suppress errors from Supabase signOut - we're going to force clean up anyway
-      try {
-        console.log(`[${logoutId}] Calling supabase.auth.signOut()...`);
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          console.error(`[${logoutId}] Supabase signOut error:`, error);
-          // Continue with logout process even if Supabase signOut fails
-        } else {
-          console.log(`[${logoutId}] Supabase signOut completed successfully`);
-        }
-      } catch (signOutError) {
-        console.error(`[${logoutId}] Exception during supabase.auth.signOut():`, signOutError);
-        // Continue with logout process even if Supabase signOut throws
-      }
       
-      // Forcefully clear all storage mechanisms
-      try {
-        // Local storage cleanup
-        console.log(`[${logoutId}] Clearing localStorage...`);
-        localStorage.removeItem('sb-refresh-token');
-        localStorage.removeItem('sb-access-token');
-        localStorage.removeItem('supabase.auth.token');
-        // These are the keys we know about, but clear everything to be safe
-        for (const key of Object.keys(localStorage)) {
-          if (key.startsWith('sb-') || key.includes('supabase')) {
-            localStorage.removeItem(key);
-            console.log(`[${logoutId}] Removed localStorage key: ${key}`);
-          }
-        }
-        
-        // Add an extra clean sweep attempt for ALL storage
-        console.log(`[${logoutId}] Final storage cleanup sweep...`);
-        try {
-          localStorage.clear();
-          sessionStorage.clear();
-        } catch (storageError) {
-          console.error(`[${logoutId}] Error during final storage cleanup:`, storageError);
-        }
-        
-        console.log(`[${logoutId}] Storage cleared successfully`);
-      } catch (storageError) {
-        console.error(`[${logoutId}] Error clearing storage:`, storageError);
-      }
-
-      console.log(`[${logoutId}] Logout process completed, redirecting to auth page...`);
+      // Clear Supabase session
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       
-      // Navigate to auth page - use a timeout to ensure all cleanup operations complete
-      // and a clean redirect happens even if something fails along the way
+      // Clear local storage and session storage
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Clear cookies
+      document.cookie.split(";").forEach((cookie) => {
+        document.cookie = cookie
+          .replace(/^ +/, "")
+          .replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
+      });
+
+      // Navigate to auth page
       window.location.href = '/auth';
-      
-      // Don't rely on the timeout, force the redirect immediately
-      setTimeout(() => {
-        console.log(`[${logoutId}] Backup timeout redirect triggered`);
-        window.location.href = '/auth';
-      }, 500);
     } catch (error: any) {
       console.error('Logout failed:', error);
-      
-      // Final failsafe - force redirect to auth page regardless of errors
-      try {
-        // Clear sensitive data even if we had an error
-        setUser(null);
-        localStorage.clear();
-        sessionStorage.clear();
-      } catch (e) {
-        console.error('Final error cleanup failed:', e);
-      }
-      
-      // Force redirect to auth page as a last resort
+      // Even if there's an error, ensure we clean up
+      setUser(null);
+      localStorage.clear();
+      sessionStorage.clear();
       window.location.href = '/auth';
     }
   };
+
+  // Handle tab close and navigation events
+  useEffect(() => {
+    let isNavigatingBack = false;
+
+    // Handle navigation (back/forward)
+    const handleNavigation = (event: PopStateEvent) => {
+      if (!isNavigatingBack) {
+        isNavigatingBack = true;
+        // Let the default back navigation happen naturally
+        // without programmatically calling history.go()
+        
+        // Reset the flag after navigation completes
+        setTimeout(() => {
+          isNavigatingBack = false;
+        }, 100);
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('popstate', handleNavigation);
+
+    // Cleanup listeners on unmount
+    return () => {
+      window.removeEventListener('popstate', handleNavigation);
+    };
+  }, []);
 
   // Initialize auth state
   useEffect(() => {
@@ -163,13 +129,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check for existing session
     const initializeAuth = async () => {
       try {
-        console.log('Initializing auth state...');
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session && mounted) {
-          console.log('Session found:', session.user.id);
           const profile = await fetchUserProfile(session.user.id);
-          
           if (profile && mounted) {
             setUser({
               id: session.user.id,
@@ -177,10 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: profile.name || '',
               role: profile.role as UserRole,
             });
-            console.log('User profile loaded:', profile.name, profile.role);
           }
-        } else {
-          console.log('No active session found');
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -190,9 +150,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           timeoutId = setTimeout(() => {
             if (mounted) {
               setLoading(false);
-              console.log('Auth loading complete');
             }
-          }, 100);
+          }, 0);
         }
       }
     };
@@ -201,14 +160,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change event:', event);
-      
       if (!mounted) return;
 
       if (event === 'SIGNED_IN' && session) {
-        console.log('User signed in:', session.user.id);
         const profile = await fetchUserProfile(session.user.id);
-        
         if (profile && mounted) {
           setUser({
             id: session.user.id,
@@ -216,31 +171,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name: profile.name || '',
             role: profile.role as UserRole,
           });
-          
           timeoutId = setTimeout(() => {
             if (mounted) {
               setLoading(false);
             }
-          }, 100);
+          }, 0);
         }
       } else if (event === 'SIGNED_OUT' && mounted) {
-        console.log('User signed out');
         setUser(null);
-        
         timeoutId = setTimeout(() => {
           if (mounted) {
             setLoading(false);
           }
-        }, 100);
+        }, 0);
       }
     });
 
     // Cleanup subscription, mounted flag, and timeouts on unmount
     return () => {
-      console.log('Cleaning up auth subscriptions');
       mounted = false;
       subscription.unsubscribe();
-      
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
