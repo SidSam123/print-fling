@@ -31,20 +31,9 @@ const UserRedirect: React.FC<UserRedirectProps> = ({
       return; // Already on the correct page
     }
     
-    switch (role) {
-      case 'customer':
-        navigate('/customer-dashboard');
-        break;
-      case 'shopkeeper':
-        navigate('/shopkeeper-dashboard');
-        break;
-      case 'admin':
-        navigate('/admin-dashboard');
-        break;
-      default:
-        navigate('/');
-    }
-  }, [navigate, location.pathname]);
+    // Use window.location for a full page refresh to ensure clean state
+    window.location.href = targetPath;
+  }, [location.pathname]);
 
   // Handle auth state and redirects
   useEffect(() => {
@@ -69,7 +58,7 @@ const UserRedirect: React.FC<UserRedirectProps> = ({
       // If a role is required and no user is logged in, redirect to auth
       if (requiredRole !== null && !user) {
         console.log(`Role required but no user logged in, redirecting to: ${redirectTo}`);
-        navigate(redirectTo);
+        window.location.href = redirectTo; // Use window.location for clean refresh
         return;
       }
       
@@ -91,7 +80,7 @@ const UserRedirect: React.FC<UserRedirectProps> = ({
       mounted = false;
       clearTimeout(timeoutId);
     };
-  }, [user, loading, requiredRole, redirectTo, navigate, redirectBasedOnRole, location.pathname]);
+  }, [user, loading, requiredRole, redirectTo, redirectBasedOnRole, location.pathname]);
 
   // Show loading or render children
   if (loading) {

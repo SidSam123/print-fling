@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type PrintJob = {
   id: string;
@@ -48,29 +50,31 @@ const statusStyles = {
 const ActiveOrders = () => {
   const { user } = useAuth();
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [viewingDocument, setViewingDocument] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const channelRef = useRef<any>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const isMountedRef = useRef<boolean>(true);
+  const channelRef = useRef<any>(null);
   const lastFetchTimeRef = useRef<number>(0);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchPrintJobs = async (forceFetch = false) => {
-    if (!user || !isMountedRef.current) return;
+  // Function to fetch print jobs with retry and throttling logic
+  const fetchPrintJobs = async (force = false) => {
+    if (!user?.id || !isMountedRef.current) return;
 
-    // Throttle fetches to prevent unnecessary calls
+    // Throttle fetches to prevent too many requests
     const now = Date.now();
-    if (!forceFetch && now - lastFetchTimeRef.current < 3000) {
-      return; // Skip fetching if it's been less than 3 seconds since last fetch
+    if (!force && now - lastFetchTimeRef.current < 3000) {
+      console.log('Throttling fetchPrintJobs request');
+      return;
     }
     
     lastFetchTimeRef.current = now;
     
     try {
-      setLoading(true);
-      
-      console.log('Fetching print jobs for user:', user.id);
+      console.log(`Fetching print jobs for user: ${user.id}`);
       
       const { data: jobsData, error: jobsError } = await supabase
         .from('print_jobs')
@@ -81,14 +85,20 @@ const ActiveOrders = () => {
 
       if (jobsError) {
         console.error('Error fetching jobs:', jobsError);
-        setError('Failed to load your orders');
+        if (isMountedRef.current) {
+          setError('Failed to load your orders');
+          setRetryCount(prev => prev + 1);
+        }
         return;
       }
 
       if (!jobsData || jobsData.length === 0) {
         console.log('No active print jobs found');
-        setPrintJobs([]);
-        setError(null);
+        if (isMountedRef.current) {
+          setPrintJobs([]);
+          setError(null);
+          setLoading(false);
+        }
         return;
       }
 
@@ -101,7 +111,10 @@ const ActiveOrders = () => {
 
       if (shopsError) {
         console.error('Error fetching shops:', shopsError);
-        setError('Failed to load shop details');
+        if (isMountedRef.current) {
+          setError('Failed to load shop details');
+          setRetryCount(prev => prev + 1);
+        }
         return;
       }
 
@@ -110,103 +123,171 @@ const ActiveOrders = () => {
         shop_name: shopsData?.find(s => s.id === job.shop_id)?.name || 'Unknown Shop',
       }));
 
-      console.log('Loaded print jobs:', jobsWithShopNames.length);
+      console.log(`Successfully loaded ${jobsWithShopNames.length} print jobs`);
       
       if (isMountedRef.current) {
         setPrintJobs(jobsWithShopNames);
         setError(null);
+        setLoading(false);
+        // Reset retry count on success
+        setRetryCount(0);
       }
     } catch (error: any) {
-      console.error('Error fetching print jobs:', error);
+      console.error('Error in fetchPrintJobs:', error);
       if (isMountedRef.current) {
         setError('An unexpected error occurred');
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
+        setRetryCount(prev => prev + 1);
       }
     }
   };
 
+  // Set up realtime subscription to listen for changes
   const setupRealtimeSubscription = () => {
-    if (!user?.id || !isMountedRef.current) return;
-
-    // Clean up any existing channel first
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
+    if (!user?.id || !isMountedRef.current) {
+      console.log('Cannot setup realtime: missing user ID or component unmounted');
+      return;
     }
 
-    // Create a unique channel name with the user ID and a timestamp to avoid conflicts
-    const channelName = `customer_orders_${user.id}_${Date.now()}`;
-    
-    console.log(`Setting up realtime subscription for ${channelName}`);
-    
-    channelRef.current = supabase
-      .channel(channelName)
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'print_jobs',
-          filter: `customer_id=eq.${user.id}`
-        }, 
-        (payload) => {
-          console.log('Received realtime update for print_jobs:', payload);
-          if (isMountedRef.current) {
-            fetchPrintJobs(true);
+    // Clean up existing channel if any
+    if (channelRef.current) {
+      console.log('Removing existing channel subscription');
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    // Create a unique channel name
+    const channelName = `active_orders_${user.id}_${Date.now()}`;
+    console.log(`Setting up new realtime channel: ${channelName}`);
+
+    try {
+      channelRef.current = supabase
+        .channel(channelName)
+        .on('postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'print_jobs',
+            filter: `customer_id=eq.${user.id}`
+          }, 
+          (payload) => {
+            console.log('Received realtime update:', payload);
+            if (isMountedRef.current) {
+              fetchPrintJobs(true);
+            }
           }
-        }
-      )
-      .subscribe((status) => {
-        console.log(`Subscription status for ${channelName}:`, status);
-      });
+        )
+        .subscribe((status) => {
+          console.log(`Realtime subscription status for ${channelName}:`, status);
+          
+          // If subscription fails, fall back to polling
+          if (status !== 'SUBSCRIBED' && isMountedRef.current) {
+            console.log('Realtime subscription failed, falling back to polling');
+            startPolling();
+          }
+        });
+    } catch (error) {
+      console.error('Error setting up realtime subscription:', error);
+      // Fall back to polling if realtime setup fails
+      if (isMountedRef.current) {
+        startPolling();
+      }
+    }
   };
 
+  // Start polling as a fallback mechanism
+  const startPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    
+    console.log('Starting polling for updates every 10 seconds');
+    pollingIntervalRef.current = setInterval(() => {
+      if (document.visibilityState === 'visible' && isMountedRef.current) {
+        console.log('Polling: fetching print jobs');
+        fetchPrintJobs();
+      }
+    }, 10000);
+  };
+
+  // Effect to initialize data and subscriptions
   useEffect(() => {
+    console.log('ActiveOrders component mounted');
     isMountedRef.current = true;
     
-    // Initial data fetch
-    fetchPrintJobs(true);
-    
-    // Set up realtime subscription
-    setupRealtimeSubscription();
-    
-    // Function to handle visibility change
-    const handleVisibilityChange = () => {
-      console.log('Document visibility state changed:', document.visibilityState);
+    const initializeComponent = async () => {
+      if (!user?.id) {
+        console.log('No user ID available, waiting...');
+        return;
+      }
       
-      if (document.visibilityState === 'visible') {
-        console.log('Tab became visible, refreshing orders and reestablishing realtime connection');
+      // Initial data fetch
+      await fetchPrintJobs(true);
+      
+      // Set up realtime subscription
+      setupRealtimeSubscription();
+    };
+    
+    initializeComponent();
+    
+    // Handle visibility changes (tab switching)
+    const handleVisibilityChange = () => {
+      console.log('Document visibility changed:', document.visibilityState);
+      
+      if (document.visibilityState === 'visible' && isMountedRef.current) {
+        console.log('Tab is now visible, refreshing data');
         fetchPrintJobs(true);
+        
+        // Re-establish realtime connection when tab becomes visible
         setupRealtimeSubscription();
       }
     };
     
-    // Add visibility change listener
+    // Add event listener for visibility changes
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Set up periodic refresh when the tab is visible
-    const intervalId = setInterval(() => {
-      if (document.visibilityState === 'visible' && isMountedRef.current) {
-        console.log('Periodic refresh while tab is visible');
-        fetchPrintJobs();
-      }
-    }, 30000); // Refresh every 30 seconds if tab is visible
     
     // Cleanup function
     return () => {
-      console.log('Unmounting ActiveOrders component, cleaning up resources');
+      console.log('ActiveOrders component unmounting');
       isMountedRef.current = false;
       
+      // Remove realtime subscription
       if (channelRef.current) {
-        console.log('Removing channel subscription');
+        console.log('Cleaning up channel subscription');
         supabase.removeChannel(channelRef.current);
       }
       
+      // Clear polling interval
+      if (pollingIntervalRef.current) {
+        console.log('Clearing polling interval');
+        clearInterval(pollingIntervalRef.current);
+      }
+      
+      // Remove event listener
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(intervalId);
     };
   }, [user?.id]);
+
+  // Auto-retry logic for errors
+  useEffect(() => {
+    let retryTimeout: NodeJS.Timeout | null = null;
+    
+    if (error && retryCount < 3 && isMountedRef.current) {
+      console.log(`Auto-retrying fetch (attempt ${retryCount + 1} of 3)`);
+      const delay = Math.min(2000 * (retryCount + 1), 10000); // Exponential backoff
+      
+      retryTimeout = setTimeout(() => {
+        if (isMountedRef.current) {
+          fetchPrintJobs(true);
+        }
+      }, delay);
+    }
+    
+    return () => {
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+    };
+  }, [error, retryCount]);
 
   const cancelOrder = async (jobId: string) => {
     if (!user) return;
@@ -220,9 +301,7 @@ const ActiveOrders = () => {
 
       if (error) throw error;
 
-      // After cancellation, update the local state to reflect the change
-      setPrintJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
-
+      // We'll rely on the realtime update to refresh the UI
       toast.success('Order cancelled successfully');
     } catch (error: any) {
       console.error('Error cancelling order:', error);
@@ -246,6 +325,7 @@ const ActiveOrders = () => {
     }
   };
 
+  // Loading state
   if (loading) {
     return (
       <Card className="bg-card shadow-sm">
@@ -255,16 +335,38 @@ const ActiveOrders = () => {
             Track and manage your current print jobs
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col items-center py-8">
-          <div className="p-4 bg-primary/10 rounded-full mb-4">
-            <div className="h-6 w-6 border-2 border-t-primary border-r-transparent border-l-transparent border-b-transparent animate-spin"></div>
+        <CardContent>
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="p-4 border rounded-lg">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex gap-3 items-center">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div>
+                      <Skeleton className="h-5 w-32 mb-2" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-6 w-20" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2 mb-4">
+                  {[1, 2, 3, 4, 5, 6].map((j) => (
+                    <Skeleton key={j} className="h-4 w-24" />
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-9 w-32" />
+                  <Skeleton className="h-9 w-32" />
+                </div>
+              </div>
+            ))}
           </div>
-          <p className="text-sm text-muted-foreground">Loading your orders...</p>
         </CardContent>
       </Card>
     );
   }
 
+  // Error state
   if (error) {
     return (
       <Card className="bg-card shadow-sm">
@@ -297,6 +399,7 @@ const ActiveOrders = () => {
     );
   }
 
+  // Empty state
   if (printJobs.length === 0) {
     return (
       <Card className="bg-card shadow-sm">
@@ -322,6 +425,7 @@ const ActiveOrders = () => {
     );
   }
 
+  // Success state with data
   return (
     <>
       <Card className="bg-card shadow-sm">
