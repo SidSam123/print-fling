@@ -35,6 +35,10 @@ interface PrintJobWithProfile extends DatabasePrintJob {
   profiles: Profile | null;
 }
 
+type PrintJobResponse = Omit<PrintJob, 'customer_name'> & {
+  profiles: User | null;
+};
+
 const statusStyles = {
   pending: {
     bgColor: 'bg-yellow-100',
@@ -78,12 +82,10 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
     try {
       setLoading(true);
       
-      console.log('Fetching print jobs for shop ID:', currentShopId);
-      
-      // First fetch print jobs with customer profile information 
-      const { data, error: jobsError } = await supabase
+      // First fetch print jobs
+      const { data: jobsData, error: jobsError } = await supabase
         .from('print_jobs')
-        .select('*, profiles:customer_id(*)')
+        .select('*')
         .eq('shop_id', currentShopId)
         .order('created_at', { ascending: false });
 
@@ -93,25 +95,46 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         return;
       }
 
-      console.log('Fetched print jobs data:', data);
-
-      if (!data || data.length === 0) {
+      if (!jobsData || jobsData.length === 0) {
         setPrintJobs([]);
         setError(null);
         setLastFetchTime(now);
         return;
       }
 
+      let customerProfiles: { id: string; name: string | null; }[] = [];
+
+      // Get unique customer IDs
+      const customerIds = [...new Set(jobsData.map(job => job.customer_id))];
+
+      try {
+        // Fetch customer profiles
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', customerIds);
+
+        if (profilesError) {
+          console.error('Error fetching customer profiles:', profilesError);
+        } else {
+          customerProfiles = profiles || [];
+        }
+      } catch (error) {
+        console.error('Error fetching customer profiles:', error);
+      }
+
       // Map jobs with customer names
-      const jobsWithCustomerNames = data.map((job: any) => {
+      const jobsWithCustomerNames = jobsData.map(job => {
+        const customerProfile = customerProfiles.find(p => p.id === job.customer_id);
+        const customerName = customerProfile?.name || 'Unknown Customer';
+        
         return {
           ...job,
-          customer_name: job.profiles?.name || 'Unknown Customer'
+          customer_name: customerName
         } as PrintJob;
       });
 
       setPrintJobs(jobsWithCustomerNames);
-      console.log('Processed print jobs with customer names:', jobsWithCustomerNames);
       setError(null);
       setLastFetchTime(now);
     } catch (error: any) {
@@ -572,9 +595,9 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
                           {job.status === 'pending' && (
                             <>
                               <Button 
-                                variant="default" 
+                                variant="outline" 
                                 size="sm" 
-                                className="text-green-100 bg-green-600 hover:bg-green-700"
+                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
                                 onClick={() => markJobAsCompleted(job.id)}
                               >
                                 <CheckCircle className="mr-2 h-4 w-4" />
@@ -582,8 +605,9 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
                               </Button>
                               
                               <Button 
-                                variant="destructive" 
-                                size="sm"
+                                variant="outline" 
+                                size="sm" 
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
                                 onClick={() => setConfirmingCancelId(job.id)}
                               >
                                 <X className="mr-2 h-4 w-4" />
