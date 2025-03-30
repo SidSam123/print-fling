@@ -82,10 +82,13 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
     try {
       setLoading(true);
       
-      // First fetch print jobs
-      const { data: jobsData, error: jobsError } = await supabase
+      // First fetch print jobs with customer profile information using a join
+      const { data: jobsWithProfiles, error: jobsError } = await supabase
         .from('print_jobs')
-        .select('*')
+        .select(`
+          *,
+          profiles:customer_id(id, name)
+        `)
         .eq('shop_id', currentShopId)
         .order('created_at', { ascending: false });
 
@@ -95,42 +98,18 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         return;
       }
 
-      if (!jobsData || jobsData.length === 0) {
+      if (!jobsWithProfiles || jobsWithProfiles.length === 0) {
         setPrintJobs([]);
         setError(null);
         setLastFetchTime(now);
         return;
       }
 
-      let customerProfiles: { id: string; name: string | null; }[] = [];
-
-      // Get unique customer IDs
-      const customerIds = [...new Set(jobsData.map(job => job.customer_id))];
-
-      try {
-        // Fetch customer profiles
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, name')
-          .in('id', customerIds);
-
-        if (profilesError) {
-          console.error('Error fetching customer profiles:', profilesError);
-        } else {
-          customerProfiles = profiles || [];
-        }
-      } catch (error) {
-        console.error('Error fetching customer profiles:', error);
-      }
-
       // Map jobs with customer names
-      const jobsWithCustomerNames = jobsData.map(job => {
-        const customerProfile = customerProfiles.find(p => p.id === job.customer_id);
-        const customerName = customerProfile?.name || 'Unknown Customer';
-        
+      const jobsWithCustomerNames = jobsWithProfiles.map((job: PrintJobWithProfile) => {
         return {
           ...job,
-          customer_name: customerName
+          customer_name: job.profiles?.name || 'Unknown Customer'
         } as PrintJob;
       });
 
