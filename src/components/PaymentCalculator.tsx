@@ -32,7 +32,7 @@ const PaymentCalculator = ({
   const [copied, setCopied] = useState(false);
   const [orderCompleted, setOrderCompleted] = useState(false);
   const [paymentVerifying, setPaymentVerifying] = useState(false);
-  const razorpayButtonContainerRef = useRef<HTMLDivElement>(null);
+  const [paymentFormReady, setPaymentFormReady] = useState(false);
   
   useEffect(() => {
     // Fetch shop details to get UPI ID
@@ -62,31 +62,12 @@ const PaymentCalculator = ({
     fetchShopDetails();
   }, [shopId]);
   
-  // Load the Razorpay script when component mounts
+  // Set payment form as ready after order is created
   useEffect(() => {
-    const loadRazorpayScript = () => {
-      // Clear any existing script tags first
-      if (razorpayButtonContainerRef.current) {
-        razorpayButtonContainerRef.current.innerHTML = '';
-        
-        // Create script element
-        const script = document.createElement('script');
-        script.src = 'https://cdn.razorpay.com/static/widget/payment-button.js';
-        script.async = true;
-        script.dataset.payment_button_id = 'pl_Jpb8JcRT3ITKIQ';
-        script.dataset.button_text = 'Pay Now';
-        
-        // Append script to container
-        razorpayButtonContainerRef.current.appendChild(script);
-      }
-    };
-
-    // Only load script if we have a valid order ID
-    if (orderId && paymentMethod === 'razorpay') {
-      // Add a small delay to ensure DOM is ready
-      setTimeout(loadRazorpayScript, 100);
+    if (orderId) {
+      setPaymentFormReady(true);
     }
-  }, [orderId, paymentMethod]);
+  }, [orderId]);
   
   const calculateTotalPrice = () => {
     if (!printSpecs.pricePerPage) return 0;
@@ -217,6 +198,14 @@ const PaymentCalculator = ({
     }
   };
   
+  const handleRazorpayPaymentSuccess = () => {
+    toast.success('Payment received successfully!');
+    setOrderCompleted(true);
+    setTimeout(() => {
+      onOrderPlaced();
+    }, 1500);
+  };
+  
   // Calculate if form is complete and ready for order creation
   const isFormComplete = user && shopId && documentPath && printSpecs.pricePerPage !== null;
   
@@ -312,24 +301,21 @@ const PaymentCalculator = ({
             {paymentMethod === 'razorpay' && (
               <div className="space-y-4">
                 <div className="text-center mb-2 text-sm text-muted-foreground">Pay securely via Razorpay</div>
-                <div 
-                  ref={razorpayButtonContainerRef} 
-                  id="razorpay-payment-button-container" 
-                  className="flex justify-center"
-                >
-                  {/* Razorpay button will be injected here */}
-                </div>
+                
+                {paymentFormReady && (
+                  <form className="flex justify-center">
+                    <script 
+                      src="https://cdn.razorpay.com/static/widget/payment-button.js" 
+                      data-payment_button_id="pl_Jpb8JcRT3ITKIQ" 
+                      data-button_text="Pay Now">
+                    </script>
+                  </form>
+                )}
                 
                 {/* Fallback button for testing */}
                 <Button 
                   className="w-full mt-2"
-                  onClick={() => {
-                    toast.success('This is a test environment. In production, the Razorpay payment flow would appear here.');
-                    setOrderCompleted(true);
-                    setTimeout(() => {
-                      onOrderPlaced();
-                    }, 1500);
-                  }}
+                  onClick={handleRazorpayPaymentSuccess}
                 >
                   Demo: Pay ₹{totalPrice.toFixed(2)} with Razorpay
                 </Button>
