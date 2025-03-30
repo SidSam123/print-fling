@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PrintSpecs } from '@/components/PrintSpecifications';
@@ -32,7 +32,6 @@ const PaymentCalculator = ({
   const [copied, setCopied] = useState(false);
   const [orderCompleted, setOrderCompleted] = useState(false);
   const [paymentVerifying, setPaymentVerifying] = useState(false);
-  const [paymentFormReady, setPaymentFormReady] = useState(false);
   
   useEffect(() => {
     // Fetch shop details to get UPI ID
@@ -62,12 +61,28 @@ const PaymentCalculator = ({
     fetchShopDetails();
   }, [shopId]);
   
-  // Set payment form as ready after order is created
+  // Load the Razorpay script when component mounts
   useEffect(() => {
-    if (orderId) {
-      setPaymentFormReady(true);
+    const loadRazorpayScript = () => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/payment-button.js';
+      script.async = true;
+      script.dataset.payment_button_id = 'pl_MzMLRg8qBmJFbQ'; // Replace with your actual Razorpay payment button ID
+      
+      // Get the razorpay-payment container element
+      const container = document.getElementById('razorpay-payment-button-container');
+      
+      // Only append if container exists and it doesn't already have the script
+      if (container && !container.querySelector('script')) {
+        container.appendChild(script);
+      }
+    };
+
+    // Only load script if we have a valid order ID
+    if (orderId && paymentMethod === 'razorpay') {
+      loadRazorpayScript();
     }
-  }, [orderId]);
+  }, [orderId, paymentMethod]);
   
   const calculateTotalPrice = () => {
     if (!printSpecs.pricePerPage) return 0;
@@ -198,14 +213,6 @@ const PaymentCalculator = ({
     }
   };
   
-  const handleRazorpayPaymentSuccess = () => {
-    toast.success('Payment received successfully!');
-    setOrderCompleted(true);
-    setTimeout(() => {
-      onOrderPlaced();
-    }, 1500);
-  };
-  
   // Calculate if form is complete and ready for order creation
   const isFormComplete = user && shopId && documentPath && printSpecs.pricePerPage !== null;
   
@@ -301,24 +308,21 @@ const PaymentCalculator = ({
             {paymentMethod === 'razorpay' && (
               <div className="space-y-4">
                 <div className="text-center mb-2 text-sm text-muted-foreground">Pay securely via Razorpay</div>
-                
-                {paymentFormReady && (
-                  <form className="flex justify-center">
-                    <script 
-                      src="https://cdn.razorpay.com/static/widget/payment-button.js" 
-                      data-payment_button_id="pl_Jpb8JcRT3ITKIQ" 
-                      data-button_text="Pay Now">
-                    </script>
-                  </form>
-                )}
-                
-                {/* Fallback button for testing */}
-                <Button 
-                  className="w-full mt-2"
-                  onClick={handleRazorpayPaymentSuccess}
-                >
-                  Demo: Pay ₹{totalPrice.toFixed(2)} with Razorpay
-                </Button>
+                <div id="razorpay-payment-button-container" className="flex justify-center">
+                  {/* Razorpay button will be injected here */}
+                  <Button 
+                    className="w-full"
+                    onClick={() => {
+                      toast.success('This is a test environment. In production, the Razorpay payment flow would appear here.');
+                      setOrderCompleted(true);
+                      setTimeout(() => {
+                        onOrderPlaced();
+                      }, 1500);
+                    }}
+                  >
+                    Pay ₹{totalPrice.toFixed(2)} with Razorpay
+                  </Button>
+                </div>
               </div>
             )}
             
@@ -345,7 +349,7 @@ const PaymentCalculator = ({
                     </div>
                   </div>
                   
-                  <Alert>
+                  <Alert variant="outline">
                     <AlertDescription className="text-sm">
                       Once you've completed the payment, click the "I've Paid" button below.
                     </AlertDescription>
