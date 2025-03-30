@@ -35,10 +35,6 @@ interface PrintJobWithProfile extends DatabasePrintJob {
   profiles: Profile | null;
 }
 
-type PrintJobResponse = Omit<PrintJob, 'customer_name'> & {
-  profiles: User | null;
-};
-
 const statusStyles = {
   pending: {
     bgColor: 'bg-yellow-100',
@@ -82,13 +78,12 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
     try {
       setLoading(true);
       
-      // First fetch print jobs with customer profile information using a join
-      const { data: jobsWithProfiles, error: jobsError } = await supabase
+      console.log('Fetching print jobs for shop ID:', currentShopId);
+      
+      // First fetch print jobs with customer profile information 
+      const { data, error: jobsError } = await supabase
         .from('print_jobs')
-        .select(`
-          *,
-          profiles:customer_id(id, name)
-        `)
+        .select('*, profiles:customer_id(*)')
         .eq('shop_id', currentShopId)
         .order('created_at', { ascending: false });
 
@@ -98,7 +93,9 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         return;
       }
 
-      if (!jobsWithProfiles || jobsWithProfiles.length === 0) {
+      console.log('Fetched print jobs data:', data);
+
+      if (!data || data.length === 0) {
         setPrintJobs([]);
         setError(null);
         setLastFetchTime(now);
@@ -106,7 +103,7 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
       }
 
       // Map jobs with customer names
-      const jobsWithCustomerNames = jobsWithProfiles.map((job: PrintJobWithProfile) => {
+      const jobsWithCustomerNames = data.map((job: any) => {
         return {
           ...job,
           customer_name: job.profiles?.name || 'Unknown Customer'
@@ -114,6 +111,7 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
       });
 
       setPrintJobs(jobsWithCustomerNames);
+      console.log('Processed print jobs with customer names:', jobsWithCustomerNames);
       setError(null);
       setLastFetchTime(now);
     } catch (error: any) {
@@ -574,9 +572,9 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
                           {job.status === 'pending' && (
                             <>
                               <Button 
-                                variant="outline" 
+                                variant="default" 
                                 size="sm" 
-                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                className="text-green-100 bg-green-600 hover:bg-green-700"
                                 onClick={() => markJobAsCompleted(job.id)}
                               >
                                 <CheckCircle className="mr-2 h-4 w-4" />
@@ -584,9 +582,8 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
                               </Button>
                               
                               <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                variant="destructive" 
+                                size="sm"
                                 onClick={() => setConfirmingCancelId(job.id)}
                               >
                                 <X className="mr-2 h-4 w-4" />
