@@ -29,14 +29,15 @@ interface User {
 
 interface PrintJob extends DatabasePrintJob {
   customer_name: string;
+  customer_email: string | null;
 }
 
 interface PrintJobWithProfile extends DatabasePrintJob {
   profiles: Profile | null;
 }
 
-type PrintJobResponse = Omit<PrintJob, 'customer_name'> & {
-  profiles: User | null;
+type PrintJobResponse = Omit<PrintJob, 'customer_name' | 'customer_email'> & {
+  profiles: Profile | null;
 };
 
 const statusStyles = {
@@ -85,7 +86,10 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
       // First fetch print jobs
       const { data: jobsData, error: jobsError } = await supabase
         .from('print_jobs')
-        .select('*')
+        .select(`
+          *,
+          profiles:customer_id(name, email)
+        `)
         .eq('shop_id', currentShopId)
         .order('created_at', { ascending: false });
 
@@ -102,39 +106,20 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         return;
       }
 
-      let customerProfiles: { id: string; name: string | null; }[] = [];
-
-      // Get unique customer IDs
-      const customerIds = [...new Set(jobsData.map(job => job.customer_id))];
-
-      try {
-        // Fetch customer profiles
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, name')
-          .in('id', customerIds);
-
-        if (profilesError) {
-          console.error('Error fetching customer profiles:', profilesError);
-        } else {
-          customerProfiles = profiles || [];
-        }
-      } catch (error) {
-        console.error('Error fetching customer profiles:', error);
-      }
-
-      // Map jobs with customer names
-      const jobsWithCustomerNames = jobsData.map(job => {
-        const customerProfile = customerProfiles.find(p => p.id === job.customer_id);
+      // Map jobs with customer names and emails
+      const jobsWithCustomerDetails = jobsData.map((job: any) => {
+        const customerProfile = job.profiles;
         const customerName = customerProfile?.name || 'Unknown Customer';
+        const customerEmail = customerProfile?.email || null;
         
         return {
           ...job,
-          customer_name: customerName
+          customer_name: customerName,
+          customer_email: customerEmail
         } as PrintJob;
       });
 
-      setPrintJobs(jobsWithCustomerNames);
+      setPrintJobs(jobsWithCustomerDetails);
       setError(null);
       setLastFetchTime(now);
     } catch (error: any) {
@@ -557,11 +542,18 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
                           </div>
                         </div>
                         
-                        <div className="flex items-center gap-2 mt-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <p className="text-sm">
-                            <span className="text-muted-foreground">Customer:</span> {job.customer_name}
-                          </p>
+                        <div className="flex flex-col gap-1 mt-2">
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-muted-foreground" />
+                            <p className="text-sm">
+                              <span className="text-muted-foreground">Customer:</span> {job.customer_name}
+                            </p>
+                          </div>
+                          {job.customer_email && (
+                            <p className="text-sm ml-6">
+                              <span className="text-muted-foreground">Email:</span> {job.customer_email}
+                            </p>
+                          )}
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2 text-sm">
