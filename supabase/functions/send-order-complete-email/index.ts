@@ -17,6 +17,8 @@ interface RequestBody {
 }
 
 serve(async (req) => {
+  console.log("Email notification function invoked");
+  
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -28,6 +30,7 @@ serve(async (req) => {
     const { orderId } = requestData;
 
     if (!orderId) {
+      console.error("Missing orderId in request");
       return new Response(
         JSON.stringify({ error: "Order ID is required" }),
         { 
@@ -52,7 +55,7 @@ serve(async (req) => {
     if (orderError || !order) {
       console.error("Error fetching order:", orderError);
       return new Response(
-        JSON.stringify({ error: "Order not found" }),
+        JSON.stringify({ error: "Order not found", details: orderError }),
         { 
           status: 404, 
           headers: { "Content-Type": "application/json", ...corsHeaders }
@@ -70,7 +73,7 @@ serve(async (req) => {
     if (shopError || !shop) {
       console.error("Error fetching shop:", shopError);
       return new Response(
-        JSON.stringify({ error: "Shop details not found" }),
+        JSON.stringify({ error: "Shop details not found", details: shopError }),
         { 
           status: 404, 
           headers: { "Content-Type": "application/json", ...corsHeaders }
@@ -82,6 +85,7 @@ serve(async (req) => {
     const customerName = order.profiles?.name || "Customer";
 
     if (!customerEmail) {
+      console.error("Customer email not found");
       return new Response(
         JSON.stringify({ error: "Customer email not found" }),
         { 
@@ -141,6 +145,8 @@ serve(async (req) => {
         </body>
       </html>
     `;
+
+    console.log(`Sending email to ${customerEmail}`);
 
     // Send the email using Supabase auth.admin.sendEmail
     const { error: emailError } = await supabase.auth.admin.sendEmail(

@@ -294,21 +294,16 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
         )
       );
 
-      // Send email notification
-      try {
-        const { error: emailError } = await supabase.functions.invoke('send-order-complete-email', {
-          body: { orderId: jobId }
-        });
+      const { data, error: emailError } = await supabase.functions.invoke('send-order-complete-email', {
+        body: { orderId: jobId },
+        method: 'POST'
+      });
 
-        if (emailError) {
-          console.error('Error sending email notification:', emailError);
-          toast.error('Order marked as completed, but email notification failed');
-        } else {
-          toast.success('Order marked as completed and customer notified');
-        }
-      } catch (emailError) {
-        console.error('Error invoking email function:', emailError);
+      if (emailError) {
+        console.error('Error sending email notification:', emailError);
         toast.error('Order marked as completed, but email notification failed');
+      } else {
+        toast.success('Order marked as completed and customer notified');
       }
 
       if (onOrderCompleted) {
