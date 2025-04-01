@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import UserRedirect from '@/components/UserRedirect';
@@ -24,7 +23,6 @@ const ShopkeeperDashboard = () => {
   const [totalSales, setTotalSales] = useState(0);
   const [dailyEarnings, setDailyEarnings] = useState(0);
   
-  // Fetch shops owned by the current user
   useEffect(() => {
     const fetchShops = async () => {
       if (!user) return;
@@ -44,7 +42,6 @@ const ShopkeeperDashboard = () => {
         
         setShops(data || []);
 
-        // If we have shops, fetch stats
         if (data && data.length > 0) {
           fetchStats(data.map(shop => shop.id));
         }
@@ -59,10 +56,8 @@ const ShopkeeperDashboard = () => {
     fetchShops();
   }, [user]);
 
-  // Fetch dashboard statistics
   const fetchStats = async (shopIds: string[]) => {
     try {
-      // Fetch pending orders count
       const { data: pendingOrders, error: pendingError } = await supabase
         .from('print_jobs')
         .select('id', { count: 'exact' })
@@ -73,7 +68,6 @@ const ShopkeeperDashboard = () => {
         setPendingOrdersCount(pendingOrders?.length || 0);
       }
 
-      // Fetch completed orders count
       const { data: completedOrders, error: completedError } = await supabase
         .from('print_jobs')
         .select('id', { count: 'exact' })
@@ -84,7 +78,6 @@ const ShopkeeperDashboard = () => {
         setCompletedOrdersCount(completedOrders?.length || 0);
       }
       
-      // Fetch total sales from all completed orders
       const { data: salesData, error: salesError } = await supabase
         .from('print_jobs')
         .select('price')
@@ -96,7 +89,6 @@ const ShopkeeperDashboard = () => {
         setTotalSales(total);
       }
       
-      // Calculate daily earnings - orders completed today
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
@@ -119,14 +111,12 @@ const ShopkeeperDashboard = () => {
   const handleNewShopSuccess = () => {
     setShowNewShopForm(false);
     setLoading(true);
-    // Refetch shops
     fetchShops();
   };
   
   const handleEditLocationSuccess = () => {
     setEditingShopId(null);
     setLoading(true);
-    // Refetch shops
     fetchShops();
   };
   
@@ -148,7 +138,6 @@ const ShopkeeperDashboard = () => {
       
       setShops(data || []);
       
-      // If we have shops, fetch stats
       if (data && data.length > 0) {
         fetchStats(data.map(shop => shop.id));
       }
@@ -160,7 +149,6 @@ const ShopkeeperDashboard = () => {
     }
   };
 
-  // Function to refresh stats - will be passed to ShopOrdersTab
   const refreshStats = () => {
     if (shops.length > 0) {
       fetchStats(shops.map(shop => shop.id));
@@ -191,7 +179,6 @@ const ShopkeeperDashboard = () => {
               </Button>
             </div>
             
-            {/* Dashboard stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-on-load">
               <Card className="bg-card shadow-sm card-hover">
                 <CardHeader className="pb-2">
@@ -317,7 +304,6 @@ const ShopkeeperDashboard = () => {
                     </div>
                     ) : shops.length > 0 ? (
                       <div className="space-y-6 px-6 pb-6">
-                      {/* <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"> */}
                         <div className="space-y-4">
                           {shops.map((shop) => (
                             <Card key={shop.id} className="bg-card shadow-sm overflow-hidden hover:shadow-md transition-shadow card-hover">

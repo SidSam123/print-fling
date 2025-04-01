@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, FileText, Clock, Printer, AlertTriangle, CheckCircle, 
@@ -87,12 +88,10 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
     try {
       setLoading(true);
       
+      // First, get all print jobs for this shop
       const { data: jobsData, error: jobsError } = await supabase
         .from('print_jobs')
-        .select(`
-          *,
-          profiles(id, name, email)
-        `)
+        .select('*')
         .eq('shop_id', currentShopId)
         .order('created_at', { ascending: false });
       
@@ -109,12 +108,25 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
         return;
       }
 
-      console.log("Jobs data with profiles:", jobsData);
+      // Now, fetch all customer profiles for these jobs in a single query
+      const customerIds = jobsData.map(job => job.customer_id);
+      const { data: customerProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name, email')
+        .in('id', customerIds);
 
+      if (profilesError) {
+        console.error('Error fetching customer profiles:', profilesError);
+      }
+
+      // Map customer data to jobs
       const jobsWithCustomerDetails = jobsData.map((job: any) => {
-        const customerProfile = job.profiles;
+        // Find the matching customer profile
+        const customerProfile = customerProfiles?.find(profile => profile.id === job.customer_id) || null;
+        
         const customerName = customerProfile?.name || 'Unknown Customer';
-        const customerEmail = customerProfile?.email || 'Unknown Email';
+        // Use null coalescing to handle null values - only show "Unknown Email" if truly null or undefined
+        const customerEmail = customerProfile?.email ?? 'Unknown Email';
 
         return {
           ...job,
@@ -281,6 +293,7 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
 
   const markJobAsCompleted = async (jobId: string) => {
     try {
+      // First update the job status in the database
       const { error } = await supabase
         .from('print_jobs')
         .update({ status: 'completed' })
@@ -288,6 +301,7 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
 
       if (error) throw error;
 
+      // Update local state to reflect the change
       setPrintJobs(prevJobs => 
         prevJobs.map(job => 
           job.id === jobId 
@@ -296,16 +310,23 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
         )
       );
 
-      const { data, error: emailError } = await supabase.functions.invoke('send-order-complete-email', {
-        body: { orderId: jobId },
-        method: 'POST'
-      });
+      // Then call the edge function to send the email notification
+      toast.info('Sending completion notification to customer...');
+      
+      try {
+        const { data, error: emailError } = await supabase.functions.invoke('send-order-complete-email', {
+          body: { orderId: jobId }
+        });
 
-      if (emailError) {
-        console.error('Error sending email notification:', emailError);
+        if (emailError) {
+          console.error('Error sending email notification:', emailError);
+          toast.error('Order marked as completed, but email notification failed');
+        } else {
+          toast.success('Order marked as completed and customer notified');
+        }
+      } catch (emailError: any) {
+        console.error('Exception in email notification:', emailError);
         toast.error('Order marked as completed, but email notification failed');
-      } else {
-        toast.success('Order marked as completed and customer notified');
       }
 
       if (onOrderCompleted) {
@@ -474,7 +495,36 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
             </TabsList>
 
             <TabsContent value={activeTab}>
-              {filteredJobs.length === 0 ? (
+              {loading ? (
+                <div className="flex flex-col items-center py-8">
+                  <div className="p-4 bg-primary/10 rounded-full mb-4">
+                    <div className="h-6 w-6 border-2 border-t-primary border-r-transparent border-l-transparent border-b-transparent animate-spin"></div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Loading orders...</p>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center py-8">
+                  <div className="p-5 bg-red-100 rounded-full mb-5">
+                    <AlertTriangle size={48} className="text-red-500" />
+                  </div>
+                  <h3 className="text-lg font-medium text-red-500">Error Loading Orders</h3>
+                  <p className="text-sm text-muted-foreground max-w-md mt-2 text-center">
+                    {error}. Please try refreshing the page.
+                  </p>
+                  <Button 
+                    className="mt-6" 
+                    onClick={() => {
+                      setError(null);
+                      setLoading(true);
+                      if (selectedShopId) {
+                        fetchPrintJobs(selectedShopId).finally(() => setLoading(false));
+                      }
+                    }}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : filteredJobs.length === 0 ? (
                 <div className="flex flex-col items-center py-8">
                   <div className="p-5 bg-muted rounded-full mb-5">
                     <FileText size={48} className="text-muted-foreground" />
@@ -538,7 +588,9 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
                           <div className="flex items-center gap-2">
                             <Mail className="h-4 w-4 text-muted-foreground" />
                             <p className="text-sm">
-                              <span className="text-muted-foreground">Email:</span> {job.customer_email}
+                              <span className="text-muted-foreground">Email:</span> {job.customer_email === 'Unknown Email' ? 
+                                <span className="text-amber-500">Not provided</span> : 
+                                job.customer_email}
                             </p>
                           </div>
                         </div>
