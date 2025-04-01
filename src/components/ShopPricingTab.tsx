@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -26,6 +25,7 @@ const ShopPricingTab = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  
   const [upiId, setUpiId] = useState<string>('');
   const [savingUpi, setSavingUpi] = useState(false);
 
@@ -108,7 +108,6 @@ const ShopPricingTab = () => {
     };
   }, [user]);
 
-  // Update UPI ID when shop selection changes
   useEffect(() => {
     if (selectedShopId) {
       const selectedShop = shops.find(shop => shop.id === selectedShopId);

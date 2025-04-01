@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +9,7 @@ import { Loader2, IndianRupee, Calculator, QrCode, Copy, Check } from 'lucide-re
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import QRCode from 'qrcode';
 
 interface PaymentCalculatorProps {
   printSpecs: PrintSpecs;
@@ -32,6 +32,7 @@ const PaymentCalculator = ({
   const [copied, setCopied] = useState(false);
   const [orderCompleted, setOrderCompleted] = useState(false);
   const [paymentVerifying, setPaymentVerifying] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   
   useEffect(() => {
     // Fetch shop details to get UPI ID
@@ -181,10 +182,16 @@ const PaymentCalculator = ({
       const { error } = await supabase
         .from('print_jobs')
         .update({ payment_status: 'completed' })
-        .eq('id', orderId);
-        
+        .eq('id', orderId); 
+
       if (error) throw error;
       
+      const my_payment_status = await supabase
+        .from('print_jobs')
+        .select('payment_status')
+        .eq('id', orderId);
+      console.log("payment status", my_payment_status)
+
       toast.success('Payment verified! Your order has been placed.');
       setOrderCompleted(true);
       // Wait a bit before notifying parent component
@@ -197,6 +204,8 @@ const PaymentCalculator = ({
     } finally {
       setPaymentVerifying(false);
     }
+
+
   };
   
   const handlePlaceOrder = async () => {
@@ -218,6 +227,27 @@ const PaymentCalculator = ({
   
   // Calculate total price
   const totalPrice = calculateTotalPrice();
+  
+  const generateQrCode = async () => {
+    if (!shopUpiId || !totalPrice) return;
+    
+    // Construct UPI URL with required parameters
+    const upiUrl = `upi://pay?pa=${shopUpiId}&pn=PrintShop&am=${totalPrice.toFixed(2)}&cu=INR&tn=Print_Order_${orderId}`;
+    
+    try {
+      const url = await QRCode.toDataURL(upiUrl);
+      setQrCodeUrl(url);
+    } catch (err) {
+      console.error('Error generating QR code:', err);
+      toast.error('Failed to generate QR code');
+    }
+  };
+  
+  useEffect(() => {
+    if (paymentMethod === 'upi' && shopUpiId && orderId) {
+      generateQrCode();
+    }
+  }, [paymentMethod, shopUpiId, orderId, totalPrice]);
   
   return (
     <Card className="bg-card shadow-sm">
@@ -332,7 +362,15 @@ const PaymentCalculator = ({
                 
                 <div className="bg-muted/30 p-4 rounded-lg flex flex-col items-center space-y-4">
                   <div className="p-4 bg-white rounded-md">
-                    <QrCode size={120} className="text-primary" />
+                    {qrCodeUrl ? (
+                      <img 
+                        src={qrCodeUrl} 
+                        alt="Payment QR Code" 
+                        className="w-[120px] h-[120px]"
+                      />
+                    ) : (
+                      <QrCode size={120} className="text-primary" />
+                    )}
                   </div>
                   
                   <div className="text-center space-y-1">
@@ -349,7 +387,8 @@ const PaymentCalculator = ({
                     </div>
                   </div>
                   
-                  <Alert variant="outline">
+                  {/* <Alert variant="destructive">  */}
+                  <Alert variant="default"> 
                     <AlertDescription className="text-sm">
                       Once you've completed the payment, click the "I've Paid" button below.
                     </AlertDescription>

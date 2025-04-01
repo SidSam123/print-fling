@@ -19,6 +19,7 @@ export type Database = {
           file_path: string
           id: string
           paper_size: string
+          payment_method: string | null
           payment_status: string | null
           price: number | null
           shop_id: string
@@ -35,6 +36,7 @@ export type Database = {
           file_path: string
           id?: string
           paper_size: string
+          payment_method?: string | null
           payment_status?: string | null
           price?: number | null
           shop_id: string
@@ -51,6 +53,7 @@ export type Database = {
           file_path?: string
           id?: string
           paper_size?: string
+          payment_method?: string | null
           payment_status?: string | null
           price?: number | null
           shop_id?: string
@@ -59,6 +62,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_customer"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "print_jobs_shop_id_fkey"
             columns: ["shop_id"]

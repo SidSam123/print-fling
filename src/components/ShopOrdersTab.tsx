@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, FileText, Clock, Printer, AlertTriangle, CheckCircle, 
-  User, X, Eye, LucideIndianRupee 
+  User, X, Eye, LucideIndianRupee, Mail 
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,7 @@ interface User {
 
 interface PrintJob extends DatabasePrintJob {
   customer_name: string;
-  customer_email: string | null;
+  customer_email: string;
 }
 
 interface PrintJobWithProfile extends DatabasePrintJob {
@@ -39,6 +39,11 @@ interface PrintJobWithProfile extends DatabasePrintJob {
 type PrintJobResponse = Omit<PrintJob, 'customer_name' | 'customer_email'> & {
   profiles: Profile | null;
 };
+
+interface ShopOrdersTabProps {
+  shopId?: string;
+  onOrderCompleted?: () => void;
+}
 
 const statusStyles = {
   pending: {
@@ -58,7 +63,7 @@ const statusStyles = {
   },
 };
 
-const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
+const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
   const { user } = useAuth();
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
   const [loading, setLoading] = useState(false);
@@ -74,7 +79,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
   const fetchPrintJobs = async (currentShopId: string, force: boolean = false) => {
     if (!user || !currentShopId) return;
 
-    // Only fetch if forced or if it's been more than 5 seconds since last fetch
     const now = Date.now();
     if (!force && now - lastFetchTime < 5000) {
       return;
@@ -83,7 +87,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
     try {
       setLoading(true);
       
-      // First fetch print jobs
       const { data: jobsData, error: jobsError } = await supabase
         .from('print_jobs')
         .select(`
@@ -92,7 +95,7 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         `)
         .eq('shop_id', currentShopId)
         .order('created_at', { ascending: false });
-
+      
       if (jobsError) {
         console.error('Error fetching jobs:', jobsError);
         setError('Failed to load orders');
@@ -106,12 +109,11 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         return;
       }
 
-      // Map jobs with customer names and emails
       const jobsWithCustomerDetails = jobsData.map((job: any) => {
         const customerProfile = job.profiles;
         const customerName = customerProfile?.name || 'Unknown Customer';
-        const customerEmail = customerProfile?.email || null;
-        
+        const customerEmail = customerProfile?.email || 'Unknown Email';
+
         return {
           ...job,
           customer_name: customerName,
@@ -134,7 +136,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
   const fetchUserShops = async (force: boolean = false) => {
     if (!user) return;
 
-    // Only fetch if forced or if it's been more than 5 seconds since last fetch
     const now = Date.now();
     if (!force && now - lastFetchTime < 5000) {
       return;
@@ -190,10 +191,8 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
       }
     };
 
-    // Initial load
     loadShops(true);
 
-    // Handle visibility change
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && mounted) {
         retryCount = 0;
@@ -257,7 +256,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
       setupSubscription(selectedShopId);
     }
 
-    // Handle visibility change
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && mounted && selectedShopId) {
         retryCount = 0;
@@ -296,35 +294,14 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
         )
       );
 
+      if (onOrderCompleted) {
+        onOrderCompleted();
+      }
+
       toast.success('Order marked as completed');
     } catch (error: any) {
       console.error('Error completing order:', error);
       toast.error(error.message || 'Failed to complete order');
-    }
-  };
-
-  const cancelOrder = async (jobId: string) => {
-    try {
-      const { error } = await supabase
-        .from('print_jobs')
-        .update({ status: 'cancelled' })
-        .eq('id', jobId);
-
-      if (error) throw error;
-
-      setPrintJobs(prevJobs => 
-        prevJobs.map(job => 
-          job.id === jobId 
-            ? { ...job, status: 'cancelled' } 
-            : job
-        )
-      );
-
-      setConfirmingCancelId(null);
-      toast.success('Order cancelled successfully');
-    } catch (error: any) {
-      console.error('Error cancelling order:', error);
-      toast.error(error.message || 'Failed to cancel order');
     }
   };
 
@@ -479,11 +456,9 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
           )}
           
           <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-4">
+            <TabsList className="mb-2">
               <TabsTrigger value="pending">Pending</TabsTrigger>
               <TabsTrigger value="completed">Completed</TabsTrigger>
-              <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
-              <TabsTrigger value="all">All Orders</TabsTrigger>
             </TabsList>
 
             <TabsContent value={activeTab}>
@@ -498,8 +473,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
                       ? "You don't have any pending print orders."
                       : activeTab === 'completed'
                       ? "You don't have any completed print orders."
-                      : activeTab === 'cancelled'
-                      ? "You don't have any cancelled print orders."
                       : "You don't have any print orders yet."}
                   </p>
                 </div>
@@ -542,20 +515,24 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
                           </div>
                         </div>
                         
-                        <div className="flex flex-col gap-1 mt-2">
+                        <div className="flex flex-col gap-2 mt-2">
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-muted-foreground" />
                             <p className="text-sm">
                               <span className="text-muted-foreground">Customer:</span> {job.customer_name}
                             </p>
                           </div>
+                          
                           {job.customer_email && (
-                            <p className="text-sm ml-6">
-                              <span className="text-muted-foreground">Email:</span> {job.customer_email}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-muted-foreground" />
+                              <p className="text-sm">
+                                <span className="text-muted-foreground">Email:</span> {job.customer_email}
+                              </p>
+                            </div>
                           )}
                         </div>
-                        
+                      
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2 text-sm">
                           <div>
                             <span className="text-muted-foreground">Paper:</span> {job.paper_size}
@@ -595,16 +572,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
                                 <CheckCircle className="mr-2 h-4 w-4" />
                                 Mark as Completed
                               </Button>
-                              
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => setConfirmingCancelId(job.id)}
-                              >
-                                <X className="mr-2 h-4 w-4" />
-                                Cancel Order
-                              </Button>
                             </>
                           )}
                         </div>
@@ -632,28 +599,6 @@ const ShopOrdersTab = ({ shopId }: { shopId?: string }) => {
               />
             )}
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!confirmingCancelId} onOpenChange={() => setConfirmingCancelId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel Order</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to cancel this print order? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2">
-            <Button variant="outline" onClick={() => setConfirmingCancelId(null)}>
-              No, Keep Order
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={() => confirmingCancelId && cancelOrder(confirmingCancelId)}
-            >
-              Yes, Cancel Order
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
