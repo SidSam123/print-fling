@@ -19,7 +19,6 @@ export type Database = {
           file_path: string
           id: string
           paper_size: string
-          payment_method: string | null
           payment_status: string | null
           price: number | null
           shop_id: string
@@ -36,7 +35,6 @@ export type Database = {
           file_path: string
           id?: string
           paper_size: string
-          payment_method?: string | null
           payment_status?: string | null
           price?: number | null
           shop_id: string
@@ -53,7 +51,6 @@ export type Database = {
           file_path?: string
           id?: string
           paper_size?: string
-          payment_method?: string | null
           payment_status?: string | null
           price?: number | null
           shop_id?: string

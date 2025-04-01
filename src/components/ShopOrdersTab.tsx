@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, FileText, Clock, Printer, AlertTriangle, CheckCircle, 
@@ -294,11 +295,26 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
         )
       );
 
+      // Send email notification
+      try {
+        const { error: emailError } = await supabase.functions.invoke('send-order-complete-email', {
+          body: { orderId: jobId }
+        });
+
+        if (emailError) {
+          console.error('Error sending email notification:', emailError);
+          toast.error('Order marked as completed, but email notification failed');
+        } else {
+          toast.success('Order marked as completed and customer notified');
+        }
+      } catch (emailError) {
+        console.error('Error invoking email function:', emailError);
+        toast.error('Order marked as completed, but email notification failed');
+      }
+
       if (onOrderCompleted) {
         onOrderCompleted();
       }
-
-      toast.success('Order marked as completed');
     } catch (error: any) {
       console.error('Error completing order:', error);
       toast.error(error.message || 'Failed to complete order');
