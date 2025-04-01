@@ -42,7 +42,7 @@ serve(async (req) => {
 
     console.log(`Processing order completion email for order: ${orderId}`);
 
-    // Get the order details with customer info
+    // Get the order details with customer info - using a direct join to get the customer's email
     const { data: order, error: orderError } = await supabase
       .from('print_jobs')
       .select(`
@@ -63,6 +63,8 @@ serve(async (req) => {
       );
     }
 
+    console.log("Retrieved order details:", JSON.stringify(order, null, 2));
+
     // Get shop details
     const { data: shop, error: shopError } = await supabase
       .from('shops')
@@ -81,11 +83,30 @@ serve(async (req) => {
       );
     }
 
-    const customerEmail = order.profiles?.email;
-    const customerName = order.profiles?.name || "Customer";
+    // Get customer profile directly if the join didn't work
+    let customerEmail = order.profiles?.email;
+    let customerName = order.profiles?.name || "Customer";
+
+    // If no email found in the join, try a direct query
+    if (!customerEmail) {
+      console.log(`No email found in join, fetching directly for customer ID: ${order.customer_id}`);
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('name, email')
+        .eq('id', order.customer_id)
+        .single();
+        
+      if (profileError) {
+        console.error("Error fetching customer profile:", profileError);
+      } else if (userProfile) {
+        customerEmail = userProfile.email;
+        customerName = userProfile.name || "Customer";
+        console.log(`Found customer email directly: ${customerEmail}`);
+      }
+    }
 
     if (!customerEmail) {
-      console.error("Customer email not found");
+      console.error("Customer email not found even after direct query");
       return new Response(
         JSON.stringify({ error: "Customer email not found" }),
         { 

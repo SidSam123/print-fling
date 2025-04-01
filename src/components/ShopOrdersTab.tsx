@@ -91,7 +91,7 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
         .from('print_jobs')
         .select(`
           *,
-          profiles:customer_id(name, email)
+          profiles(id, name, email)
         `)
         .eq('shop_id', currentShopId)
         .order('created_at', { ascending: false });
@@ -108,6 +108,8 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
         setLastFetchTime(now);
         return;
       }
+
+      console.log("Jobs data with profiles:", jobsData);
 
       const jobsWithCustomerDetails = jobsData.map((job: any) => {
         const customerProfile = job.profiles;
@@ -533,14 +535,12 @@ const ShopOrdersTab = ({ shopId, onOrderCompleted }: ShopOrdersTabProps) => {
                             </p>
                           </div>
                           
-                          {job.customer_email && (
-                            <div className="flex items-center gap-2">
-                              <Mail className="h-4 w-4 text-muted-foreground" />
-                              <p className="text-sm">
-                                <span className="text-muted-foreground">Email:</span> {job.customer_email}
-                              </p>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-4 w-4 text-muted-foreground" />
+                            <p className="text-sm">
+                              <span className="text-muted-foreground">Email:</span> {job.customer_email}
+                            </p>
+                          </div>
                         </div>
                       
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2 text-sm">
